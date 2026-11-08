@@ -14,5 +14,18 @@
 <button class="btn" id="cfgb">⚙ CONFIGURAÇÕES</button><div class="menu-footer"><div id="rank"></div><div class="rbar"><div id="rb"></div></div></div><button id="go">INICIAR PARTIDA <span>➜</span></button>
 </div>
 <div id="cfg"><div class="cbox" id="cbox"></div></div><div id="end"><h1 id="et"></h1><div id="ed" style="font-family:Arial;font-size:18px;line-height:1.7;margin:12px 0"></div><div class="bar"><div id="eb"></div></div><div id="er" style="font-size:20px"></div><div class="row" style="margin-top:18px"><button class="btn on" id="back">VOLTAR AO LÓBI</button></div></div>
+<script>
+window.socketReady = new Promise(resolve => {
+  if (location.protocol === "file:") {
+    resolve(null);
+    return;
+  }
+  const script = document.createElement("script");
+  script.src = "/socket.io/socket.io.js";
+  script.onload = () => resolve(io());
+  script.onerror = () => resolve(null);
+  document.head.appendChild(script);
+});
+</script>
 <script src="game.js"></script>
 </body></html>
