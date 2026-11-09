@@ -128,6 +128,35 @@ test("starts full rooms at ten real players and puts the next player in a new ro
     assert.equal(matchmaker.waitingRooms.get("solo:0").members.length, 1);
 });
 
+test("x1 waits for two real players and starts without bots", () => {
+    const { connect, matchmaker, timers } = harness();
+    const first = connect("first");
+    const second = connect("second");
+    const third = connect("third");
+    let firstMatch;
+    let secondMatch;
+    first.on("matchmaking:started", data => { firstMatch = data; });
+    second.on("matchmaking:started", data => { secondMatch = data; });
+
+    queue(first, { mode: "x1" });
+    const room = matchmaker.waitingRooms.get("x1:0");
+    assert.equal(room.members.length, 1);
+    assert.equal(room.started, false);
+    assert.equal(timers.length, 0);
+    matchmaker.startRoom(room);
+    assert.equal(firstMatch, undefined);
+
+    queue(second, { mode: "x1" });
+    assert.equal(firstMatch.roomId, secondMatch.roomId);
+    assert.equal(firstMatch.players.length, 2);
+    assert.equal(firstMatch.totalPlayers, 2);
+    assert.deepEqual(room.botSlots, []);
+    assert.equal(room.bots.size, 0);
+
+    queue(third, { mode: "x1" });
+    assert.equal(matchmaker.waitingRooms.get("x1:0").members.length, 1);
+});
+
 test("cancelling matchmaking removes only that player from the waiting room", () => {
     const { connect, matchmaker } = harness();
     const first = connect("first");

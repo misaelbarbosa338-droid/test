@@ -55,3 +55,40 @@ test("real Socket.IO clients join the same room and receive live combat updates"
     assert.equal(damage.hp, 80);
     assert.equal(damage.attackerId, first.id);
 });
+
+test("x1 waits for a second real Socket.IO player instead of starting with bots", { timeout: 5000 }, async t => {
+    const server = http.createServer();
+    const io = new Server(server);
+    const matchmaker = createMatchmaker(io, { waitMs: 100 });
+    io.on("connection", socket => matchmaker.attach(socket));
+    await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+    const url = `http://127.0.0.1:${server.address().port}`;
+    const first = connect(url, { reconnection: false });
+    const second = connect(url, { reconnection: false });
+    t.after(async () => {
+        first.close();
+        second.close();
+        await new Promise(resolve => io.close(resolve));
+    });
+
+    await Promise.all([first, second].map(socket => new Promise((resolve, reject) => {
+        socket.once("connect", resolve);
+        socket.once("connect_error", reject);
+    })));
+
+    let firstMatch;
+    first.on("matchmaking:started", data => { firstMatch = data; });
+    first.emit("matchmaking:join", { mode: "x1", scene: 0, character: 0 });
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.equal(firstMatch, undefined);
+
+    const started = Promise.all([
+        new Promise(resolve => first.once("matchmaking:started", resolve)),
+        new Promise(resolve => second.once("matchmaking:started", resolve))
+    ]);
+    second.emit("matchmaking:join", { mode: "x1", scene: 0, character: 1 });
+    const [firstGame, secondGame] = await started;
+    assert.equal(firstGame.roomId, secondGame.roomId);
+    assert.equal(firstGame.players.length, 2);
+    assert.equal(firstGame.totalPlayers, 2);
+});

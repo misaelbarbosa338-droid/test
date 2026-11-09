@@ -1,7 +1,7 @@
 const { randomBytes, randomUUID } = require("node:crypto");
 
 const CHARACTER_COUNT = 17;
-const MODES = new Set(["solo", "squad"]);
+const MODES = new Set(["solo", "squad", "x1"]);
 
 function createMatchmaker(io, options = {}) {
     const waitMs = options.waitMs ?? 15_000;
@@ -17,9 +17,10 @@ function createMatchmaker(io, options = {}) {
     function status(room) {
         io.to(room.id).emit("matchmaking:waiting", {
             roomId: room.id,
+            mode: room.mode,
             count: room.members.length,
-            maxPlayers,
-            remainingMs: Math.max(0, room.deadline - Date.now())
+            maxPlayers: room.mode === "x1" ? 2 : maxPlayers,
+            remainingMs: room.mode === "x1" ? null : Math.max(0, room.deadline - Date.now())
         });
     }
 
@@ -32,6 +33,7 @@ function createMatchmaker(io, options = {}) {
 
     function startRoom(room) {
         if (room.started || room.members.length === 0) return;
+        if (room.mode === "x1" && room.members.length < 2) return;
         room.started = true;
         cleanupWaitingRoom(room);
         activeRooms.set(room.id, room);
@@ -59,7 +61,8 @@ function createMatchmaker(io, options = {}) {
             };
         });
         room.hostId = room.members[0].id;
-        room.botSlots = Array.from({ length: totalPlayers }, (_, slot) => slot)
+        const roomTotalPlayers = room.mode === "x1" ? 2 : totalPlayers;
+        room.botSlots = Array.from({ length: roomTotalPlayers }, (_, slot) => slot)
             .filter(slot => !room.members.some(member => member.slot === slot));
         room.bots = new Map(room.botSlots.map(slot => [slot, {
             slot,
@@ -77,7 +80,7 @@ function createMatchmaker(io, options = {}) {
                 mode: room.mode,
                 scene: room.scene,
                 seed,
-                totalPlayers,
+                totalPlayers: roomTotalPlayers,
                 players
             });
         }
@@ -135,19 +138,20 @@ function createMatchmaker(io, options = {}) {
             return;
         }
 
+        const roomMaxPlayers = mode === "x1" ? 2 : maxPlayers;
         const key = `${mode}:${scene}`;
         let room = waitingRooms.get(key);
-        if (!room || room.started || room.members.length >= maxPlayers) {
+        if (!room || room.started || room.members.length >= roomMaxPlayers) {
             room = {
                 id: randomUUID(),
                 mode,
                 scene,
                 members: [],
                 started: false,
-                deadline: Date.now() + waitMs,
+                deadline: mode === "x1" ? null : Date.now() + waitMs,
                 timer: null
             };
-            room.timer = setTimer(() => startRoom(room), waitMs);
+            if (mode !== "x1") room.timer = setTimer(() => startRoom(room), waitMs);
             waitingRooms.set(key, room);
             roomsById.set(room.id, room);
         }
@@ -158,7 +162,7 @@ function createMatchmaker(io, options = {}) {
         socket.join(room.id);
         acknowledge?.({ ok: true, roomId: room.id });
         status(room);
-        if (room.members.length >= maxPlayers) startRoom(room);
+        if (room.members.length >= roomMaxPlayers) startRoom(room);
     }
 
     function state(socket, payload) {
