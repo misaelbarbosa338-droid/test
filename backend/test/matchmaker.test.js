@@ -81,6 +81,7 @@ function queue(socket, data = {}) {
         mode: "solo",
         scene: 0,
         character: 0,
+        form: 0,
         ...data
     }, result => {
         response = result;
@@ -220,10 +221,46 @@ test("syncs host bot positions and validates bot damage from room players", () =
     assert.equal(botHealth.attackerId, "attacker");
 });
 
+test("relays player shots and special beams only to active room opponents", () => {
+    const { connect, matchmaker } = harness();
+    const attacker = connect("attacker");
+    const target = connect("target");
+    let receivedShot;
+    let receivedBeam;
+    target.removeAllListeners("combat:shot");
+    target.removeAllListeners("combat:beam");
+    target.on("combat:shot", data => { receivedShot = data; });
+    target.on("combat:beam", data => { receivedBeam = data; });
+    queue(attacker);
+    queue(target);
+    matchmaker.startRoom(matchmaker.waitingRooms.get("solo:0"));
+
+    const shot = {
+        x: 1, y: 2, z: 3, vx: 0, vy: 0, vz: -50,
+        style: "orb", scale: [0.5, 0.5, 0.5], color: 0xff8800, lifetime: 1.2
+    };
+    attacker.emit("combat:shot", shot);
+    assert.deepEqual(receivedShot, { playerId: "attacker", ...shot });
+
+    attacker.emit("combat:shot", { ...shot, style: "invalid" });
+    assert.deepEqual(receivedShot, { playerId: "attacker", ...shot });
+
+    const beam = {
+        x: 1, y: 2, z: 3, dx: 0, dy: 0, dz: -1,
+        length: 90, width: 7, duration: 0.9, color: 0x55aaff
+    };
+    attacker.emit("combat:beam", beam);
+    assert.deepEqual(receivedBeam, { playerId: "attacker", ...beam });
+});
+
 test("rejects invalid matchmaking options", () => {
     const { connect } = harness();
     const socket = connect("bad");
     assert.deepEqual(queue(socket, { scene: 9 }), {
+        ok: false,
+        error: "Configuração de partida inválida."
+    });
+    assert.deepEqual(queue(connect("bad-form"), { form: 4 }), {
         ok: false,
         error: "Configuração de partida inválida."
     });

@@ -1,7 +1,9 @@
 const { randomBytes, randomUUID } = require("node:crypto");
 
 const CHARACTER_COUNT = 17;
+const FORM_COUNT = 4;
 const MODES = new Set(["solo", "squad", "x1"]);
+const SHOT_STYLES = new Set(["orb", "beam", "disc", "bolt", "fire", "slash", "wolf"]);
 
 function createMatchmaker(io, options = {}) {
     const waitMs = options.waitMs ?? 15_000;
@@ -55,6 +57,7 @@ function createMatchmaker(io, options = {}) {
                 slot,
                 name: `Lutador ${slot + 1}`,
                 character: member.character,
+                form: member.form,
                 x: member.state.x,
                 y: member.state.y,
                 z: member.state.z
@@ -132,8 +135,10 @@ function createMatchmaker(io, options = {}) {
         const mode = data?.mode;
         const scene = Number(data?.scene);
         const character = Number(data?.character);
+        const form = data?.form == null ? 0 : Number(data.form);
         if (!MODES.has(mode) || !Number.isInteger(scene) || scene < 0 || scene > 3 ||
-            !Number.isInteger(character) || character < 0 || character >= CHARACTER_COUNT) {
+            !Number.isInteger(character) || character < 0 || character >= CHARACTER_COUNT ||
+            !Number.isInteger(form) || form < 0 || form >= FORM_COUNT) {
             acknowledge?.({ ok: false, error: "Configuração de partida inválida." });
             return;
         }
@@ -156,7 +161,7 @@ function createMatchmaker(io, options = {}) {
             roomsById.set(room.id, room);
         }
 
-        const member = { id: socket.id, socket, character, hp: 100, alive: true };
+        const member = { id: socket.id, socket, character, form, hp: 100, alive: true };
         room.members.push(member);
         socketRooms.set(socket.id, room.id);
         socket.join(room.id);
@@ -184,6 +189,69 @@ function createMatchmaker(io, options = {}) {
             tf: payload.tf === true
         };
         socket.to(room.id).emit("player:state", { playerId: socket.id, state: member.state });
+    }
+
+    function relayCombatEffect(socket, payload, event) {
+        const roomId = socketRooms.get(socket.id);
+        const room = roomId && activeRooms.get(roomId);
+        const member = room && room.members.find(item => item.id === socket.id && item.alive);
+        if (!room || !room.started || !member) return;
+
+        const now = Date.now();
+        member.effectTimes = (member.effectTimes || []).filter(time => now - time < 1000);
+        if (member.effectTimes.length >= 30) return;
+
+        if (event === "combat:shot") {
+            const values = [payload?.x, payload?.y, payload?.z, payload?.vx, payload?.vy, payload?.vz];
+            const scale = payload?.scale;
+            if (!values.every(Number.isFinite) || !SHOT_STYLES.has(payload?.style) ||
+                !Array.isArray(scale) || scale.length !== 3 ||
+                !scale.every(value => Number.isFinite(value) && value >= 0 && value <= 10) ||
+                !Number.isInteger(payload?.color) || payload.color < 0 || payload.color > 0xffffff ||
+                !Number.isFinite(payload?.lifetime) || payload.lifetime <= 0 || payload.lifetime > 4 ||
+                Math.abs(payload.x) > 250 || Math.abs(payload.y) > 100 || Math.abs(payload.z) > 250 ||
+                [payload.vx, payload.vy, payload.vz].some(value => Math.abs(value) > 100)) return;
+
+            member.effectTimes.push(now);
+            socket.to(room.id).emit(event, {
+                playerId: socket.id,
+                x: payload.x,
+                y: payload.y,
+                z: payload.z,
+                vx: payload.vx,
+                vy: payload.vy,
+                vz: payload.vz,
+                style: payload.style,
+                scale,
+                color: payload.color,
+                lifetime: payload.lifetime
+            });
+            return;
+        }
+
+        const values = [payload?.x, payload?.y, payload?.z, payload?.dx, payload?.dy, payload?.dz];
+        if (!values.every(Number.isFinite) ||
+            !Number.isFinite(payload?.length) || payload.length <= 0 || payload.length > 120 ||
+            !Number.isFinite(payload?.width) || payload.width <= 0 || payload.width > 20 ||
+            !Number.isFinite(payload?.duration) || payload.duration <= 0 || payload.duration > 3 ||
+            !Number.isInteger(payload?.color) || payload.color < 0 || payload.color > 0xffffff ||
+            Math.abs(payload.x) > 250 || Math.abs(payload.y) > 100 || Math.abs(payload.z) > 250 ||
+            [payload.dx, payload.dy, payload.dz].some(value => Math.abs(value) > 1.01)) return;
+
+        member.effectTimes.push(now);
+        socket.to(room.id).emit(event, {
+            playerId: socket.id,
+            x: payload.x,
+            y: payload.y,
+            z: payload.z,
+            dx: payload.dx,
+            dy: payload.dy,
+            dz: payload.dz,
+            length: payload.length,
+            width: payload.width,
+            duration: payload.duration,
+            color: payload.color
+        });
     }
 
     function botStates(socket, payload) {
@@ -334,6 +402,8 @@ function createMatchmaker(io, options = {}) {
         socket.on("matchmaking:cancel", () => leave(socket));
         socket.on("room:leave", () => leave(socket, "left"));
         socket.on("player:state", payload => state(socket, payload));
+        socket.on("combat:shot", payload => relayCombatEffect(socket, payload, "combat:shot"));
+        socket.on("combat:beam", payload => relayCombatEffect(socket, payload, "combat:beam"));
         socket.on("bots:state", payload => botStates(socket, payload));
         socket.on("combat:hit", payload => hit(socket, payload));
         socket.on("bot:hit", payload => botHit(socket, payload));

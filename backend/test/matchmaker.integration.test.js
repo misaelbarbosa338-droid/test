@@ -36,7 +36,7 @@ test("real Socket.IO clients join the same room and receive live combat updates"
         new Promise(resolve => first.once("matchmaking:started", resolve)),
         new Promise(resolve => second.once("matchmaking:started", resolve))
     ]);
-    const options = { mode: "solo", scene: 0, character: 0 };
+    const options = { mode: "solo", scene: 0, character: 0, form: 2 };
     first.emit("matchmaking:join", options);
     second.emit("matchmaking:join", options);
     const [firstMatch, secondMatch] = await started;
@@ -44,6 +44,24 @@ test("real Socket.IO clients join the same room and receive live combat updates"
     assert.equal(firstMatch.roomId, secondMatch.roomId);
     assert.equal(firstMatch.players.length, 2);
     assert.equal(firstMatch.totalPlayers, 50);
+    assert.equal(firstMatch.players[0].form, 2);
+    assert.equal(firstMatch.players[1].form, 2);
+
+    const shot = {
+        x: 1, y: 2, z: 3, vx: 0, vy: 0, vz: -50,
+        style: "orb", scale: [0.5, 0.5, 0.5], color: 0xff8800, lifetime: 1.2
+    };
+    const receivedShot = new Promise(resolve => second.once("combat:shot", resolve));
+    first.emit("combat:shot", shot);
+    assert.deepEqual(await receivedShot, { playerId: first.id, ...shot });
+
+    const beam = {
+        x: 1, y: 2, z: 3, dx: 0, dy: 0, dz: -1,
+        length: 90, width: 7, duration: 0.9, color: 0x55aaff
+    };
+    const receivedBeam = new Promise(resolve => second.once("combat:beam", resolve));
+    first.emit("combat:beam", beam);
+    assert.deepEqual(await receivedBeam, { playerId: first.id, ...beam });
 
     const receivedPosition = new Promise(resolve => second.once("player:state", resolve));
     first.emit("player:state", { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, tf: false });
