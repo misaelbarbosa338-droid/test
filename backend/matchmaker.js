@@ -5,7 +5,7 @@ const MODES = new Set(["solo", "squad", "x1"]);
 
 function createMatchmaker(io, options = {}) {
     const waitMs = options.waitMs ?? 15_000;
-    const maxPlayers = options.maxPlayers ?? 10;
+    const maxPlayers = options.maxPlayers ?? 30;
     const totalPlayers = options.totalPlayers ?? 50;
     const setTimer = options.setTimeout ?? setTimeout;
     const clearTimer = options.clearTimeout ?? clearTimeout;

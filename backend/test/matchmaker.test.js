@@ -112,19 +112,22 @@ test("keeps independent queues and starts a room with its roster after the timer
     assert.equal(firstMatch.players[0].slot, 0);
     assert.equal(firstMatch.players[1].slot, 1);
     assert.equal(firstMatch.totalPlayers, 50);
+    assert.equal(room.botSlots.length, 48);
+    assert.equal(firstMatch.players.length + room.botSlots.length, 50);
     assert.equal(matchmaker.waitingRooms.has("squad:0"), true);
 });
 
-test("starts full rooms at ten real players and puts the next player in a new room", () => {
+test("starts full rooms at thirty real players and puts the next player in a new room", () => {
     const { connect, matchmaker } = harness();
-    const sockets = Array.from({ length: 11 }, (_, i) => connect(`player-${i}`));
+    const sockets = Array.from({ length: 31 }, (_, i) => connect(`player-${i}`));
     const started = [];
     for (const socket of sockets) socket.on("matchmaking:started", data => started.push(data));
     sockets.forEach(socket => queue(socket));
 
-    assert.equal(started.length, 10);
-    assert.equal(started[0].players.length, 10);
+    assert.equal(started.length, 30);
+    assert.equal(started[0].players.length, 30);
     assert.equal(started[0].totalPlayers, 50);
+    assert.equal(matchmaker.activeRooms.get(started[0].roomId).botSlots.length, 20);
     assert.equal(matchmaker.waitingRooms.get("solo:0").members.length, 1);
 });
 
