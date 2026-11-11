@@ -199,6 +199,46 @@ test("relays player positions and applies bounded damage to opponents", () => {
     assert.equal(targetHealth.damage, 20);
 });
 
+test("allows a dead player to respawn at the original position during the first 50 seconds", () => {
+    const { connect, matchmaker } = harness();
+    const player = connect("player");
+    const opponent = connect("opponent");
+    let respawned;
+    player.on("player:respawned", data => { respawned = data; });
+    queue(player);
+    queue(opponent);
+    const room = matchmaker.waitingRooms.get("solo:0");
+    matchmaker.startRoom(room);
+    player.emit("player:eliminated");
+
+    let response;
+    player.emit("player:respawn", result => { response = result; });
+
+    assert.deepEqual(response, { ok: true });
+    assert.equal(respawned.playerId, "player");
+    assert.equal(respawned.hp, 100);
+    assert.deepEqual(respawned.state, room.members[0].spawnState);
+    assert.equal(room.members[0].alive, true);
+});
+
+test("rejects respawn after the first 50 seconds", () => {
+    const { connect, matchmaker } = harness();
+    const player = connect("player");
+    const opponent = connect("opponent");
+    queue(player);
+    queue(opponent);
+    const room = matchmaker.waitingRooms.get("solo:0");
+    matchmaker.startRoom(room);
+    player.emit("player:eliminated");
+    room.respawnUntil = Date.now() - 1;
+
+    let response;
+    player.emit("player:respawn", result => { response = result; });
+
+    assert.equal(response.ok, false);
+    assert.equal(room.members[0].alive, false);
+});
+
 test("syncs host bot positions and validates bot damage from room players", () => {
     const { connect, matchmaker } = harness();
     const host = connect("host");
@@ -251,6 +291,47 @@ test("relays player shots and special beams only to active room opponents", () =
     };
     attacker.emit("combat:beam", beam);
     assert.deepEqual(receivedBeam, { playerId: "attacker", ...beam });
+});
+
+test("broadcasts the White meteor and protects its caster during the cutscene", () => {
+    const { connect, matchmaker } = harness();
+    const attacker = connect("attacker");
+    const white = connect("white");
+    let receivedMeteor;
+    let health;
+    white.on("combat:state", data => { health = data; });
+    attacker.on("combat:meteor", data => { receivedMeteor = data; });
+    queue(attacker);
+    queue(white, { character: 3 });
+    const room = matchmaker.waitingRooms.get("solo:0");
+    matchmaker.startRoom(room);
+
+    white.emit("combat:meteor", { targetX: 12, targetZ: -8 });
+    attacker.emit("combat:hit", { targetId: "white", damage: 30 });
+
+    assert.equal(receivedMeteor.playerId, "white");
+    assert.equal(receivedMeteor.targetX, 12);
+    assert.equal(receivedMeteor.targetZ, -8);
+    assert.equal(room.members[1].hp, 100);
+    assert.equal(health, undefined);
+});
+
+test("rejects meteor casts from other characters and out-of-range targets", () => {
+    const { connect, matchmaker } = harness();
+    const player = connect("player");
+    const white = connect("white");
+    let meteorCount = 0;
+    white.on("combat:meteor", () => { meteorCount++; });
+    queue(player);
+    queue(white, { character: 3 });
+    const room = matchmaker.waitingRooms.get("solo:0");
+    matchmaker.startRoom(room);
+
+    player.emit("combat:meteor", { targetX: 1, targetZ: 1 });
+    white.emit("combat:meteor", { targetX: 150, targetZ: 0 });
+
+    assert.equal(meteorCount, 0);
+    assert.equal(room.members[0].meteorCooldownUntil, undefined);
 });
 
 test("rejects invalid matchmaking options", () => {

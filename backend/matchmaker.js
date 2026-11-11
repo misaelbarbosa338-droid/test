@@ -37,6 +37,7 @@ function createMatchmaker(io, options = {}) {
         if (room.started || room.members.length === 0) return;
         if (room.mode === "x1" && room.members.length < 2) return;
         room.started = true;
+        room.respawnUntil = Date.now() + 50_000;
         cleanupWaitingRoom(room);
         activeRooms.set(room.id, room);
 
@@ -52,6 +53,7 @@ function createMatchmaker(io, options = {}) {
                 pitch: 0,
                 tf: false
             };
+            member.spawnState = { ...member.state };
             return {
                 id: member.id,
                 slot,
@@ -83,6 +85,7 @@ function createMatchmaker(io, options = {}) {
                 mode: room.mode,
                 scene: room.scene,
                 seed,
+                respawnUntil: room.respawnUntil,
                 totalPlayers: roomTotalPlayers,
                 players
             });
@@ -319,7 +322,7 @@ function createMatchmaker(io, options = {}) {
         if (!room || !room.started || room.hostId !== socket.id) return;
         const target = room.members.find(member => member.id === payload?.targetId && member.alive);
         const source = room.bots.get(payload?.sourceBotSlot);
-        if (!target || !source || !source.alive) return;
+        if (!target || !source || !source.alive || target.invulnerableUntil > Date.now()) return;
         if (room.mode === "squad" && Math.floor(source.slot / 5) === Math.floor(target.slot / 5)) return;
         if (Math.hypot(source.state.x - target.state.x, source.state.y - target.state.y, source.state.z - target.state.z) > 100) return;
 
@@ -360,7 +363,7 @@ function createMatchmaker(io, options = {}) {
         if (!room || !room.started) return;
         const attacker = room.members.find(item => item.id === socket.id && item.alive);
         const target = room.members.find(item => item.id === payload?.targetId && item.alive);
-        if (!attacker || !target || attacker === target) return;
+        if (!attacker || !target || attacker === target || target.invulnerableUntil > Date.now()) return;
         if (room.mode === "squad" && Math.floor(attacker.slot / 5) === Math.floor(target.slot / 5)) return;
 
         const now = Date.now();
@@ -390,11 +393,57 @@ function createMatchmaker(io, options = {}) {
         const roomId = socketRooms.get(socket.id);
         const room = roomId && activeRooms.get(roomId);
         const member = room && room.members.find(item => item.id === socket.id && item.alive);
-        if (!member) return;
+        if (!member || member.invulnerableUntil > Date.now()) return;
         member.alive = false;
         member.hp = 0;
         changeHost(room);
         io.to(room.id).emit("player:eliminated", { playerId: member.id });
+    }
+
+    function respawn(socket, acknowledge) {
+        const roomId = socketRooms.get(socket.id);
+        const room = roomId && activeRooms.get(roomId);
+        const member = room && room.members.find(item => item.id === socket.id);
+        if (!room || !room.started || !member || member.left ||
+            Date.now() > room.respawnUntil || member.alive) {
+            acknowledge?.({ ok: false, error: "O ressurgimento não está disponível." });
+            return;
+        }
+
+        member.hp = 100;
+        member.alive = true;
+        member.state = { ...member.spawnState };
+        io.to(room.id).emit("player:respawned", {
+            playerId: member.id,
+            hp: member.hp,
+            state: member.state
+        });
+        changeHost(room);
+        acknowledge?.({ ok: true });
+    }
+
+    function meteor(socket, payload) {
+        const roomId = socketRooms.get(socket.id);
+        const room = roomId && activeRooms.get(roomId);
+        const member = room && room.members.find(item => item.id === socket.id && item.alive);
+        const now = Date.now();
+        if (!room || !room.started || !member || member.character !== 3 ||
+            (member.meteorCooldownUntil || 0) > now ||
+            !Number.isFinite(payload?.targetX) || !Number.isFinite(payload?.targetZ) ||
+            Math.abs(payload.targetX) > 220 || Math.abs(payload.targetZ) > 220 ||
+            Math.hypot(payload.targetX - member.state.x, payload.targetZ - member.state.z) > 120) {
+            return;
+        }
+
+        member.meteorCooldownUntil = now + 25_000;
+        member.invulnerableUntil = now + 4_200;
+        io.to(room.id).emit("combat:meteor", {
+            playerId: socket.id,
+            targetX: payload.targetX,
+            targetZ: payload.targetZ,
+            launchAt: now + 1_600,
+            flightMs: 1_150
+        });
     }
 
     function attach(socket) {
@@ -404,12 +453,14 @@ function createMatchmaker(io, options = {}) {
         socket.on("player:state", payload => state(socket, payload));
         socket.on("combat:shot", payload => relayCombatEffect(socket, payload, "combat:shot"));
         socket.on("combat:beam", payload => relayCombatEffect(socket, payload, "combat:beam"));
+        socket.on("combat:meteor", payload => meteor(socket, payload));
         socket.on("bots:state", payload => botStates(socket, payload));
         socket.on("combat:hit", payload => hit(socket, payload));
         socket.on("bot:hit", payload => botHit(socket, payload));
         socket.on("bot:playerHit", payload => botHitPlayer(socket, payload));
         socket.on("bot:eliminated", payload => eliminateBot(socket, payload));
         socket.on("player:eliminated", () => eliminate(socket));
+        socket.on("player:respawn", acknowledge => respawn(socket, acknowledge));
         socket.on("disconnect", () => leave(socket, "disconnected"));
     }
 
