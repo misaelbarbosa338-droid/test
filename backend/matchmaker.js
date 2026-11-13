@@ -1,9 +1,9 @@
 const { randomBytes, randomUUID } = require("node:crypto");
 
-const CHARACTER_COUNT = 17;
+const CHARACTER_COUNT = 18;
 const FORM_COUNT = 4;
 const MODES = new Set(["solo", "squad", "x1"]);
-const SHOT_STYLES = new Set(["orb", "beam", "disc", "bolt", "fire", "slash", "wolf"]);
+const SHOT_STYLES = new Set(["orb", "beam", "disc", "bolt", "fire", "slash", "wolf", "knife", "arrow"]);
 
 function createMatchmaker(io, options = {}) {
     const waitMs = options.waitMs ?? 15_000;
@@ -427,7 +427,7 @@ function createMatchmaker(io, options = {}) {
         const room = roomId && activeRooms.get(roomId);
         const member = room && room.members.find(item => item.id === socket.id && item.alive);
         const now = Date.now();
-        if (!room || !room.started || !member || member.character !== 3 ||
+        if (!room || !room.started || !member || member.character !== 2 ||
             (member.meteorCooldownUntil || 0) > now ||
             !Number.isFinite(payload?.targetX) || !Number.isFinite(payload?.targetZ) ||
             Math.abs(payload.targetX) > 220 || Math.abs(payload.targetZ) > 220 ||

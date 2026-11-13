@@ -118,6 +118,18 @@ test("keeps independent queues and starts a room with its roster after the timer
     assert.equal(matchmaker.waitingRooms.has("squad:0"), true);
 });
 
+test("accepts the Black, Guardiã and Chablau character indexes in matchmaking", () => {
+    const { connect, matchmaker } = harness();
+    queue(connect("black"), { character: 15 });
+    queue(connect("guardian"), { character: 16 });
+    queue(connect("chablau"), { character: 17 });
+    const room = matchmaker.waitingRooms.get("solo:0");
+
+    matchmaker.startRoom(room);
+
+    assert.deepEqual(room.members.map(member => member.character), [15, 16, 17]);
+});
+
 test("starts full rooms at thirty real players and puts the next player in a new room", () => {
     const { connect, matchmaker } = harness();
     const sockets = Array.from({ length: 31 }, (_, i) => connect(`player-${i}`));
@@ -282,8 +294,14 @@ test("relays player shots and special beams only to active room opponents", () =
     attacker.emit("combat:shot", shot);
     assert.deepEqual(receivedShot, { playerId: "attacker", ...shot });
 
+    attacker.emit("combat:shot", { ...shot, style: "knife" });
+    assert.deepEqual(receivedShot, { playerId: "attacker", ...shot, style: "knife" });
+
+    attacker.emit("combat:shot", { ...shot, style: "arrow" });
+    assert.deepEqual(receivedShot, { playerId: "attacker", ...shot, style: "arrow" });
+
     attacker.emit("combat:shot", { ...shot, style: "invalid" });
-    assert.deepEqual(receivedShot, { playerId: "attacker", ...shot });
+    assert.deepEqual(receivedShot, { playerId: "attacker", ...shot, style: "arrow" });
 
     const beam = {
         x: 1, y: 2, z: 3, dx: 0, dy: 0, dz: -1,
@@ -302,7 +320,7 @@ test("broadcasts the White meteor and protects its caster during the cutscene", 
     white.on("combat:state", data => { health = data; });
     attacker.on("combat:meteor", data => { receivedMeteor = data; });
     queue(attacker);
-    queue(white, { character: 3 });
+    queue(white, { character: 2 });
     const room = matchmaker.waitingRooms.get("solo:0");
     matchmaker.startRoom(room);
 
@@ -323,7 +341,7 @@ test("rejects meteor casts from other characters and out-of-range targets", () =
     let meteorCount = 0;
     white.on("combat:meteor", () => { meteorCount++; });
     queue(player);
-    queue(white, { character: 3 });
+    queue(white, { character: 2 });
     const room = matchmaker.waitingRooms.get("solo:0");
     matchmaker.startRoom(room);
 
@@ -338,6 +356,10 @@ test("rejects invalid matchmaking options", () => {
     const { connect } = harness();
     const socket = connect("bad");
     assert.deepEqual(queue(socket, { scene: 9 }), {
+        ok: false,
+        error: "Configuração de partida inválida."
+    });
+    assert.deepEqual(queue(connect("bad-character"), { character: 18 }), {
         ok: false,
         error: "Configuração de partida inválida."
     });

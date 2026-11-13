@@ -66,6 +66,8 @@ canvas#gl{display:block}
  #mm{top:8px;right:8px;width:86px;height:86px}
  #msg{top:52px;left:50%;width:max-content;max-width:70vw;transform:translateX(-50%);padding:4px 9px;border-radius:6px;background:#0009;font-size:14px!important;line-height:1.2}
 }
+/* modo gráficos reduzidos: remove efeitos de CSS caros em aparelhos fracos */
+body.lowfx *,body.lowfx *::before,body.lowfx *::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;filter:none!important;box-shadow:none!important;text-shadow:none!important;animation:none!important}
 @media (max-height:520px){
  #info{bottom:112px!important;padding:4px 12px}
  .form-picker{gap:3px}
