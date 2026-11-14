@@ -435,7 +435,7 @@ const GPN=[['fire','Rajada de ki'],['melee','Soco'],['spec','Golpe especial'],['
 const kn=c=>c.replace('Key','').replace('Digit','').replace('Left',' Esq').replace('Right',' Dir').replace('Arrow','Seta ');
 function renderCfgBase(){
  const sl=(l,k,mn,mx,st)=>`<div class="crow"><span>${l}</span><input type="range" min="${mn}" max="${mx}" step="${st}" value="${CFG[k]}" oninput="CFG.${k}=+this.value;saveCfg();${k=='vol'?"sfx(440,.15,'sine',.25)":''}"></div>`;
- $('cbox').innerHTML=`<h1 style="font-size:28px;text-align:left">CONFIGURAÇÕES</h1><h3>ÁUDIO</h3>${sl('Volume','vol',0,1,.05)}<h3>SENSIBILIDADE</h3>${sl('Sensibilidade (mouse, controle e toque)','sens',.3,3,.1)}<h3>TECLADO</h3>${ACT.map(([a,l])=>`<div class="crow"><span>${l}</span><button class="btn" onclick="waitK='${a}';waitG=null;renderCfg()">${waitK==a?'Pressione uma tecla...':kn(KB[a])}</button></div>`).join('')}<div class="crow"><span>${CH[sel].n=='Tanque'?'Rajada Negra':'Rajada de ki'}</span><span>Botão esquerdo do mouse</span></div><h3>COMBATE</h3><div class="crow"><span>Disparo rápido (FPS) · tiros mais frequentes, consumindo o mesmo ki por tiro</span><button class="btn" onclick="CFG.fastFire=!CFG.fastFire;saveCfg();renderCfg()">${CFG.fastFire?'LIGADO':'DESLIGADO'}</button></div><div class="crow"><span>Diminuir gráficos (aparelhos fracos) · menor resolução, sem sombras, menos partículas e detalhes, sem cine de abertura (mantém os 5 segundos)</span><button class="btn" onclick="CFG.lowerGraphics=!CFG.lowerGraphics;saveCfg();renderCfg()">${CFG.lowerGraphics?'LIGADO':'DESLIGADO'}</button></div><h3>CONTROLE (GAMEPAD)</h3><div class="crow"><span>Analógico esquerdo: mover · direito: mirar</span></div>${GPN.map(([a,l])=>`<div class="crow"><span>${a=='fire'&&CH[sel].n=='Tanque'?'Rajada Negra':l}</span><button class="btn" onclick="waitG='${a}';waitK=null;renderCfg()">${waitG==a?'Pressione um botão...':'Botão '+GP[a]}</button></div>`).join('')}<h3>HUD (CELULAR)</h3><div class="crow"><span>Controles na tela</span><button class="btn" onclick="CFG.touch=(CFG.touch+1)%3;saveCfg();renderCfg()">${['Automático','Sempre ligado','Desligado'][CFG.touch]}</button></div><div class=\"crow\"><span>Posição dos botões</span><button class=\"btn\" onclick=\"openHudEd()\">✎ EDITAR HUD</button></div>${sl('Tamanho dos botões','tsz',.6,1.6,.1)}${sl('Opacidade','top',.2,1,.05)}<div class="row" style="margin-top:18px"><button class="btn on" id="cfg-back">VOLTAR</button><button class="btn" onclick="resetCfg()">RESTAURAR PADRÕES</button></div>`;
+ $('cbox').innerHTML=`<h1 style="font-size:28px;text-align:left">CONFIGURAÇÕES</h1><h3>ÁUDIO</h3>${sl('Volume','vol',0,1,.05)}<h3>SENSIBILIDADE</h3>${sl('Sensibilidade (mouse, controle e toque)','sens',.3,3,.1)}<h3>TECLADO</h3>${ACT.map(([a,l])=>`<div class="crow"><span>${l}</span><button class="btn" onclick="waitK='${a}';waitG=null;renderCfg()">${waitK==a?'Pressione uma tecla...':kn(KB[a])}</button></div>`).join('')}<div class="crow"><span>${CH[sel].n=='Tanque'?'Rajada Negra':'Rajada de ki'}</span><span>Botão esquerdo do mouse</span></div><h3>COMBATE</h3><div class="crow"><span>Disparo rápido (FPS) · tiros mais frequentes, consumindo o mesmo ki por tiro</span><button class="btn" onclick="CFG.fastFire=!CFG.fastFire;saveCfg();renderCfg()">${CFG.fastFire?'LIGADO':'DESLIGADO'}</button></div><div class="crow"><span>Diminuir gráficos (aparelhos fracos) · menor resolução, modelos simples para os demais lutadores, sem sombras e auras, menos partículas e destroços (só neste aparelho)</span><button class="btn" onclick="CFG.lowerGraphics=!CFG.lowerGraphics;saveCfg();renderCfg()">${CFG.lowerGraphics?'LIGADO':'DESLIGADO'}</button></div><h3>CONTROLE (GAMEPAD)</h3><div class="crow"><span>Analógico esquerdo: mover · direito: mirar</span></div>${GPN.map(([a,l])=>`<div class="crow"><span>${a=='fire'&&CH[sel].n=='Tanque'?'Rajada Negra':l}</span><button class="btn" onclick="waitG='${a}';waitK=null;renderCfg()">${waitG==a?'Pressione um botão...':'Botão '+GP[a]}</button></div>`).join('')}<h3>HUD (CELULAR)</h3><div class="crow"><span>Controles na tela</span><button class="btn" onclick="CFG.touch=(CFG.touch+1)%3;saveCfg();renderCfg()">${['Automático','Sempre ligado','Desligado'][CFG.touch]}</button></div><div class=\"crow\"><span>Posição dos botões</span><button class="btn" onclick="openHudEd()">✎ EDITAR HUD</button></div>${sl('Tamanho dos botões','tsz',.6,1.6,.1)}${sl('Opacidade','top',.2,1,.05)}<div class="row" style="margin-top:18px"><button class="btn on" id="cfg-back">VOLTAR</button><button class="btn" onclick="resetCfg()">RESTAURAR PADRÕES</button></div>`;
  $('cfg-back').onclick=closeSettings;
 }
 function renderCfg(){
@@ -628,7 +628,7 @@ for(let i=0;i<MT.length;i++){const [x,z,r,h,t,top]=MT[i],seed=Math.abs(x*13+z*7)
 const NP=300,pgeo=new THREE.BufferGeometry(),ppos=new Float32Array(NP*3),parts=[],waves=[],gW=new THREE.RingGeometry(.85,1,40);
 pgeo.setAttribute('position',new THREE.BufferAttribute(ppos,3));
 const ptsM=new THREE.Points(pgeo,new THREE.PointsMaterial({color:0xaee8ff,size:.7,transparent:true,opacity:.9,depthWrite:false,fog:false}));ptsM.frustumCulled=false;scene.add(ptsM);
-function spawnP(x,y,z,vx,vy,vz,l){if(parts.length<(CFG.lowerGraphics?110:NP))parts.push({x,y,z,vx,vy,vz,l})}
+function spawnP(x,y,z,vx,vy,vz,l){if(parts.length<(CFG.lowerGraphics?40:NP))parts.push({x,y,z,vx,vy,vz,l})}
 const VIS=()=>CFG.lowerGraphics?105:170;
 const energyGlowMap=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),g=x.createRadialGradient(32,32,1,32,32,32);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.16,'rgba(255,255,255,.82)');g.addColorStop(.48,'rgba(255,255,255,.2)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,64,64);return new THREE.CanvasTexture(c)})();
 function energyGlow(color,size){const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:energyGlowMap,color,transparent:true,opacity:.72,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));glow.scale.set(size,size,1);glow.userData.base=size;return glow}
@@ -789,7 +789,7 @@ function collapseTerrain(ob,x,z){
   mesh.rotation.set(Math.random()*6,Math.random()*6,Math.random()*6);mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);
   terrainDebris.push({mesh,vx:(Math.random()-.5)*12,vy:Math.random()*8+2,vz:(Math.random()-.5)*12,spin:(Math.random()-.5)*5,size});
  }
- while(terrainDebris.length>(CFG.lowerGraphics?70:220)){const d=terrainDebris.shift();scene.remove(d.mesh);d.mesh.geometry.dispose();d.mesh.material.dispose()}
+ while(terrainDebris.length>(CFG.lowerGraphics?30:220)){const d=terrainDebris.shift();scene.remove(d.mesh);d.mesh.geometry.dispose();d.mesh.material.dispose()}
 }
 function damageTerrainRay(x,y,z,ad,length,width){
  const d=new THREE.Vector3(ad[0],ad[1],ad[2]).normalize();let target=null,hitX=0,hitZ=0,hitY=0,best=length;
@@ -1112,6 +1112,19 @@ function mkOld(ch,tag){
  const au=new THREE.Mesh(gA,new THREE.MeshBasicMaterial({color:ch.fc,transparent:true,opacity:.3,depthWrite:false}));au.position.y=1.4;au.visible=false;g.add(au);
  const r=new THREE.Mesh(gR,new THREE.MeshBasicMaterial({color:tag,side:THREE.DoubleSide}));r.rotation.x=-Math.PI/2;r.position.y=.05;r.visible=false;g.add(r);
  g.userData={hair,au,b,h};addModelDetails(g,ch,true);attachPlayerAura(g,ch);return g}
+function mkLow(ch,tag){
+ const g=new THREE.Group(),o=O[ch.n]||O[(AL[ch.n]||[])[1]]||{},L=toonMaterial,hair=[];
+ const part=(geo,color,sx,sy,sz,x,y,z)=>{const m=new THREE.Mesh(geo,L(color));m.scale.set(sx,sy,sz);m.position.set(x,y,z);g.add(m);return m};
+ const skin=o.sk||0xf1c27d,top=o.top||ch.c,pants=o.pants||ch.c,boot=o.boot||ch.c,arm=o.arm||top;
+ part(U.s,top,.64,.78,.5,0,1.82,0);
+ part(U.c,o.belt||ch.fc,.62,.12,.52,0,1.2,0);
+ part(U.s,skin,.72,.78,.68,0,2.82,0);
+ [-1,1].forEach(side=>{part(U.c,arm,.24,.72,.24,side*.72,1.82,0);part(U.c,pants,.27,.68,.28,side*.24,.62,0);part(U.b,boot,.34,.28,.42,side*.24,.2,.05)});
+ [-1,0,1].forEach((side,i)=>{const m=part(U.k,ch.h,.25,.65,.25,side*.3,3.54,0);hair.push(m)});
+ [-1,1].forEach(side=>part(U.b,0x151515,.13,.035,.035,side*.2,2.82,.59));
+ const ring=new THREE.Mesh(gR,new THREE.MeshBasicMaterial({color:tag,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.05;ring.visible=false;g.add(ring);
+ g.userData={hair,ring};return g
+}
 function clear(){if(P)P.forEach(p=>scene.remove(p.m));if(items)items.forEach(i=>scene.remove(i.m));if(pr)pr.forEach(b=>scene.remove(b.m))}
 function start(matchData=null){
  stopLobbyMusic();
@@ -1125,7 +1138,7 @@ function start(matchData=null){
  for(let i=0;i<total;i++){const entry=roster.find(p=>p.slot===i),isLocal=(!!entry&&entry.id===netPlayerId)||(!matchData&&i===0),isBot=!entry&&!isLocal,rng=randomForSlot(i,0x7f4a7c15),ch=entry?CH[entry.character]:i==0&&!matchData?CH[sel]:CH[Math.floor(rng()*CH.length)],form=isLocal?formSel:entry?entry.form:((seed+Math.imul(i+1,0x9e3779b1))>>>0)%FORM_COUNT,team=mode=='solo'||mode=='x1'?i:Math.floor(i/5);
   let x=entry?entry.x:(rng()*AH*1.6-AH*.8),z=entry?entry.z:(rng()*AH*1.6-AH*.8);while(inMt(x,z,0,3)){x=rng()*AH*1.6-AH*.8;z=rng()*AH*1.6-AH*.8}
   const p={x,y:entry?entry.y:0,z,spawnX:x,spawnY:entry?entry.y:0,spawnZ:z,vy:0,kx:0,kz:0,ky:0,hp:100,ki:30,team,ch,form,slot:i,bot:isBot,remoteBot:!!matchData&&!entry&&!netIsHost,botTarget:{x,y:0,z,yaw:0,tf:false,hp:100,alive:true},remote:!!entry&&!isLocal,netId:entry&&entry.id,netTarget:entry?{x,y:entry.y,z,yaw:0,pitch:0,tf:false}:null,alive:true,tf:false,cd:0,mc:0,sc:0,dc:0,kills:0,at:0,wx:0,wz:0,td:1e9,ix:0,iz:0,ad:[0,0,-1],name:isLocal?'VOCÊ':entry?entry.name:ch.n+' '+(i+1)};
-  const tag=isLocal?0xffd23a:team==localTeam?0x5cff5c:0xff4040;p.m=mk(ch,tag);applyFormStyle(p.m,form,ch);scene.add(p.m);P.push(p)}
+  const tag=isLocal?0xffd23a:team==localTeam?0x5cff5c:0xff4040;p.lowDetail=CFG.lowerGraphics&&!isLocal;p.m=p.lowDetail?mkLow(ch,tag):mk(ch,tag);if(p.lowDetail)markShadows(p.m,false);applyFormStyle(p.m,form,ch);scene.add(p.m);P.push(p)}
  me=localEntry?P[localEntry.slot]:P[0];yaw=cyw=0;pitch=cpt=.3;P.forEach(p=>{while(inMt(p.x,p.z,0,3)){p.x=R(-AH*.8,AH*.8);p.z=R(-AH*.8,AH*.8)}});
  for(let i=0;i<110;i++){const t=Math.random()<.45?0:1,m=new THREE.Mesh(gS,new THREE.MeshBasicMaterial({color:t?0x3ac8ff:0x5cff5c}));m.scale.setScalar(.55);let x=R(-190,190),z=R(-190,190);while(inMt(x,z,1,2)){x=R(-190,190);z=R(-190,190)}m.position.set(x,1.2,z);scene.add(m);items.push({x,z,t,m})}
  $('cfg').style.display='none';$('lobby').style.display='none';$('end').style.display='none';$('gl').style.display='block';$('hud').style.display='block';state='play';last=performance.now();
@@ -1924,6 +1937,7 @@ function attachPlayerAura(g,ch){
 }
 function updatePlayerAura(p,dt){
  const u=p.m.userData;if(!u.playerAura)return;
+ if(CFG.lowerGraphics){u.playerAura.visible=false;u.au.visible=false;return}
  const charging=!!(p.charge&&!p.tf&&p.ki<100),target=p.tf||charging?1:0,k=1-Math.exp(-7*dt);
  u.auraAlpha+=(target-u.auraAlpha)*k;
  const alpha=u.auraAlpha,colors=p.tf?(AU[p.ch.n]||[p.ch.fc,0xffffff]):[0x9feaff,0xffffff];
@@ -1944,9 +1958,9 @@ function applyFormStyle(model,id,character){
  u.formId=id;
  u.formStyle=u.formStyle||new THREE.Group();
  if(!u.formStyle.parent)model.add(u.formStyle);
- u.formStyle.clear();
- u.formRing=null;u.formSprites=[];
- if(!u.formId)return;
+ u.formStyle.clear();u.formRing=null;u.formSprites=[];
+ if(!u.formId||CFG.lowerGraphics){u.formStyle.visible=false;return}
+ u.formStyle.visible=true;
  addFormTrait(u.formStyle,character,u.formId);
  const color=form.glow;
  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.05,.035,6,40),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.8,blending:THREE.AdditiveBlending,depthWrite:false}));
@@ -1958,6 +1972,8 @@ function applyFormStyle(model,id,character){
 }
 function updateFormStyle(model){
  const u=model.userData;if(!u.formId||!u.formRing)return;
+ if(CFG.lowerGraphics){u.formStyle.visible=false;return}
+ u.formStyle.visible=true;
  const pulse=1+.09*Math.sin(T*4+(model.userData.formId||0));
  u.formRing.rotation.z=T*.35;u.formRing.scale.setScalar(pulse);
  u.formSprites.forEach((sprite,i)=>{
@@ -2096,10 +2112,18 @@ function prev(){endFus();const c=CH[sel],forms=formsFor(c);if(pv)scene.remove(pv
  $('info').innerHTML='<div class="nm">'+c.n.toUpperCase()+'</div><div class="form-picker">'+forms.map((form,i)=>'<button type="button" class="form-choice'+(formSel===i?' on':'')+'" style="--form-color:'+hx(form.glow||c.fc)+'" data-form="'+i+'">'+form.n+'</button>').join('')+'</div><div class="fm">Estilo: <b style="color:'+hx(forms[formSel].glow||c.fc)+'">'+forms[formSel].n.toUpperCase()+'</b></div>';
  $('info').querySelectorAll('[data-form]').forEach(button=>button.onclick=()=>{formSel=Number(button.dataset.form);prev()});
  if(c.n=='Gogeta')startFus()}
-// modo "Diminuir gráficos": resolução menor, sem sombras, menos partículas, detalhes e efeitos visuais
+// modo "Diminuir gráficos": reduz resolução, efeitos e detalhes dos lutadores remotos
 let lastQ=null;
+function replacePlayerQuality(p,low){
+ const old=p.m,tag=p.team===me.team?0x5cff5c:0xff4040,model=low?mkLow(p.ch,tag):mk(p.ch,tag);
+ if(low)markShadows(model,false);
+ applyFormStyle(model,p.form,p.ch);model.position.copy(old.position);model.rotation.copy(old.rotation);model.scale.copy(old.scale);model.visible=old.visible;
+ if(p.bar)model.add(p.bar);
+ scene.add(model);scene.remove(old);p.m=model;p.lowDetail=low
+}
 function applyQuality(){
  const low=!!CFG.lowerGraphics;if(low===lastQ)return;lastQ=low;
+ if(P&&me)for(const p of P)if(p!==me){if(p.lowDetail!==low)replacePlayerQuality(p,low)}else applyFormStyle(p.m,p.form,p.ch);
  rs();sun.castShadow=!low;decorMeshes.forEach(m=>m.visible=!low);document.body.classList.toggle('lowfx',low);
  scene.traverse(o=>{if(o.material)[].concat(o.material).forEach(m=>m.needsUpdate=true)})}
 function loop(t){requestAnimationFrame(loop);gpLobby();
