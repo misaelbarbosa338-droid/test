@@ -437,13 +437,54 @@ function createMatchmaker(io, options = {}) {
 
         member.meteorCooldownUntil = now + 25_000;
         member.invulnerableUntil = now + 4_200;
+        const impactAt = now + 2_750;
         io.to(room.id).emit("combat:meteor", {
             playerId: socket.id,
             targetX: payload.targetX,
             targetZ: payload.targetZ,
             launchAt: now + 1_600,
-            flightMs: 1_150
+            flightMs: 1_150,
+            impactAt
         });
+        setTimer(() => {
+            if (activeRooms.get(room.id) !== room || !room.started || !member.alive) return;
+
+            for (const target of room.members) {
+                if (!target.alive || target === member ||
+                    (room.mode === "squad" && Math.floor(target.slot / 5) === Math.floor(member.slot / 5)) ||
+                    Math.hypot(target.state.x - payload.targetX, target.state.z - payload.targetZ) >= 18) continue;
+
+                const damage = target.hp * 0.5;
+                target.hp -= damage;
+                target.alive = target.hp > 0;
+                io.to(room.id).emit("combat:state", {
+                    playerId: target.id,
+                    hp: target.hp,
+                    alive: target.alive,
+                    attackerId: member.id,
+                    damage
+                });
+                if (!target.alive) changeHost(room);
+            }
+
+            for (const bot of room.bots.values()) {
+                if (!bot.alive ||
+                    (room.mode === "squad" && Math.floor(bot.slot / 5) === Math.floor(member.slot / 5)) ||
+                    Math.hypot(bot.state.x - payload.targetX, bot.state.z - payload.targetZ) >= 18) continue;
+
+                const damage = bot.hp * 0.5;
+                bot.hp -= damage;
+                bot.alive = bot.hp > 0;
+                io.to(room.id).emit("bot:health", {
+                    slot: bot.slot,
+                    hp: bot.hp,
+                    alive: bot.alive,
+                    attackerId: member.id,
+                    damage,
+                    cause: "meteor"
+                });
+            }
+        }, impactAt - now);
     }
 
     function attach(socket) {

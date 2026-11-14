@@ -312,15 +312,17 @@ test("relays player shots and special beams only to active room opponents", () =
 });
 
 test("broadcasts the White meteor and protects its caster during the cutscene", () => {
-    const { connect, matchmaker } = harness();
+    const { connect, matchmaker, timers } = harness();
     const attacker = connect("attacker");
     const white = connect("white");
+    const outside = connect("outside");
     let receivedMeteor;
     let health;
     white.on("combat:state", data => { health = data; });
     attacker.on("combat:meteor", data => { receivedMeteor = data; });
     queue(attacker);
     queue(white, { character: 2 });
+    queue(outside);
     const room = matchmaker.waitingRooms.get("solo:0");
     matchmaker.startRoom(room);
 
@@ -332,6 +334,21 @@ test("broadcasts the White meteor and protects its caster during the cutscene", 
     assert.equal(receivedMeteor.targetZ, -8);
     assert.equal(room.members[1].hp, 100);
     assert.equal(health, undefined);
+
+    room.members[0].state = { ...room.members[0].state, x: 12, z: -8 };
+    room.members[2].state = { ...room.members[2].state, x: 30, z: -8 };
+    const bot = room.bots.values().next().value;
+    bot.state = { ...bot.state, x: 12, z: -8 };
+    const impact = timers.find(timer => timer.ms === 2_750);
+    assert.ok(impact);
+    impact.callback();
+
+    assert.equal(room.members[0].hp, 50);
+    assert.equal(health.playerId, "attacker");
+    assert.equal(health.damage, 50);
+    assert.equal(room.members[1].hp, 100);
+    assert.equal(room.members[2].hp, 100);
+    assert.equal(bot.hp, 50);
 });
 
 test("rejects meteor casts from other characters and out-of-range targets", () => {
@@ -339,7 +356,9 @@ test("rejects meteor casts from other characters and out-of-range targets", () =
     const player = connect("player");
     const white = connect("white");
     let meteorCount = 0;
-    white.on("combat:meteor", () => { meteorCount++; });
+    white.on("combat:meteor", data => {
+        if (data?.playerId) meteorCount++;
+    });
     queue(player);
     queue(white, { character: 2 });
     const room = matchmaker.waitingRooms.get("solo:0");

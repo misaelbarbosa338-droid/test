@@ -59,7 +59,7 @@ canvas#gl{display:block}
 #tbtns b{pointer-events:auto;touch-action:none;height:calc(62px*var(--s)*var(--button-scale,1));border-radius:50%;background:#ffffff22;border:2px solid #fff8;display:grid;place-items:center;font:700 calc(18px*var(--s)*var(--button-scale,1)) Orbitron,sans-serif;color:#fff}
 #tlook{position:absolute;right:0;top:0;width:55%;height:55%;pointer-events:auto;touch-action:none}
 @media (pointer:coarse) and (max-width:900px){
- #camb,#feed,#h2,#ctitle{display:none!important}
+ #camb,#feed,#h2{display:none!important}
  #hud .box{max-width:42vw;padding:5px 8px;font-size:15px;line-height:1.15}
  #hud .box br:first-of-type{display:none}
  #hud .box small{font-size:10px}
