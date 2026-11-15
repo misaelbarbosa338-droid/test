@@ -211,6 +211,49 @@ test("relays player positions and applies bounded damage to opponents", () => {
     assert.equal(targetHealth.damage, 20);
 });
 
+test("Simon can hit across the arena and Volundr defeats a full-health opponent", () => {
+    const { connect, matchmaker } = harness();
+    const simon = connect("simon");
+    const target = connect("target");
+    let health, beam;
+    target.on("combat:state", data => { health = data; });
+    target.on("combat:beam", data => { beam = data; });
+    queue(simon, { character: 6 });
+    queue(target);
+    matchmaker.startRoom(matchmaker.waitingRooms.get("solo:0"));
+    simon.emit("player:state", { x: -200, y: 0, z: 0, yaw: 0, pitch: 0 });
+    target.emit("player:state", { x: 200, y: 0, z: 0, yaw: 0, pitch: 0 });
+    simon.emit("combat:beam", { x: -200, y: 2, z: 0, dx: 1, dy: 0, dz: 0, length: 800, width: .14, duration: .2, color: 0xffffff });
+    assert.equal(beam.length, 800);
+    simon.emit("combat:hit", { targetId: "target", damage: 100, attack: "volundr" });
+    assert.equal(health.hp, 0);
+    assert.equal(health.alive, false);
+});
+
+test("Simon mines are relayed and deal 50 damage; other fighters cannot use his damage rules", () => {
+    const { connect, matchmaker } = harness();
+    const simon = connect("simon");
+    const target = connect("target");
+    let mine, health;
+    target.on("combat:mine", data => { mine = data; });
+    target.on("combat:state", data => { if (data.playerId === "target") health = data; });
+    queue(simon, { character: 6 });
+    queue(target);
+    matchmaker.startRoom(matchmaker.waitingRooms.get("solo:0"));
+    simon.emit("player:state", { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 });
+    target.emit("player:state", { x: 1, y: 0, z: 0, yaw: 0, pitch: 0 });
+    simon.emit("combat:mine", { id: 1, x: 0, z: 0 });
+    assert.equal(mine.id, 1);
+    simon.emit("combat:hit", { targetId: "target", damage: 50, attack: "mine" });
+    assert.equal(health.hp, 50);
+    simon.emit("combat:mine", { id: 1, remove: true });
+    assert.equal(mine.remove, true);
+    let simonHealth;
+    simon.on("combat:state", data => { if (data.playerId === "simon") simonHealth = data; });
+    target.emit("combat:hit", { targetId: "simon", damage: 100, attack: "volundr" });
+    assert.equal(simonHealth.hp, 25);
+});
+
 test("allows a dead player to respawn at the original position during the first 50 seconds", () => {
     const { connect, matchmaker } = harness();
     const player = connect("player");

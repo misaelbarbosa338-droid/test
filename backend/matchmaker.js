@@ -2,6 +2,7 @@ const { randomBytes, randomUUID } = require("node:crypto");
 
 const CHARACTER_COUNT = 18;
 const FORM_COUNT = 4;
+const SIMON = 6;
 const MODES = new Set(["solo", "squad", "x1"]);
 const SHOT_STYLES = new Set(["orb", "beam", "disc", "bolt", "fire", "slash", "wolf", "knife", "arrow"]);
 
@@ -69,13 +70,17 @@ function createMatchmaker(io, options = {}) {
         const roomTotalPlayers = room.mode === "x1" ? 2 : totalPlayers;
         room.botSlots = Array.from({ length: roomTotalPlayers }, (_, slot) => slot)
             .filter(slot => !room.members.some(member => member.slot === slot));
-        room.bots = new Map(room.botSlots.map(slot => [slot, {
+        const seed = randomBytes(4).readUInt32LE(0);
+        room.bots = new Map(room.botSlots.map(slot => {
+            const initial = (seed ^ Math.imul(slot + 1, 0x9e3779b1) ^ 0x7f4a7c15) >>> 0;
+            const roll = (Math.imul(initial, 1664525) + 1013904223) >>> 0;
+            return [slot, {
             slot,
+            character: Math.floor(roll / 4294967296 * CHARACTER_COUNT),
             hp: 100,
             alive: true,
             state: { x: 0, y: 0, z: 0, yaw: 0, tf: false }
-        }]));
-        const seed = randomBytes(4).readUInt32LE(0);
+        }]}));
 
         for (const member of room.members) {
             member.socket.emit("matchmaking:started", {
@@ -184,9 +189,9 @@ function createMatchmaker(io, options = {}) {
 
         member.lastStateAt = Date.now();
         member.state = {
-            x: Math.max(-220, Math.min(220, payload.x)),
+            x: Math.max(member.character === SIMON ? -280 : -220, Math.min(member.character === SIMON ? 280 : 220, payload.x)),
             y: Math.max(-35, Math.min(50, payload.y)),
-            z: Math.max(-220, Math.min(220, payload.z)),
+            z: Math.max(member.character === SIMON ? -280 : -220, Math.min(member.character === SIMON ? 280 : 220, payload.z)),
             yaw: Math.max(-Math.PI * 2, Math.min(Math.PI * 2, payload.yaw)),
             pitch: Math.max(-1, Math.min(1, payload.pitch)),
             tf: payload.tf === true
@@ -232,18 +237,22 @@ function createMatchmaker(io, options = {}) {
             return;
         }
 
+        const bot = payload?.sourceBotSlot == null ? null : room.bots.get(payload.sourceBotSlot);
+        if (payload?.sourceBotSlot != null && (!bot || !bot.alive || room.hostId !== socket.id || bot.character !== SIMON)) return;
+        const source = bot || member;
         const values = [payload?.x, payload?.y, payload?.z, payload?.dx, payload?.dy, payload?.dz];
         if (!values.every(Number.isFinite) ||
-            !Number.isFinite(payload?.length) || payload.length <= 0 || payload.length > 120 ||
+            !Number.isFinite(payload?.length) || payload.length <= 0 || payload.length > (source.character === SIMON ? 800 : 120) ||
             !Number.isFinite(payload?.width) || payload.width <= 0 || payload.width > 20 ||
             !Number.isFinite(payload?.duration) || payload.duration <= 0 || payload.duration > 3 ||
             !Number.isInteger(payload?.color) || payload.color < 0 || payload.color > 0xffffff ||
-            Math.abs(payload.x) > 250 || Math.abs(payload.y) > 100 || Math.abs(payload.z) > 250 ||
+            Math.abs(payload.x) > (source.character === SIMON ? 285 : 250) || Math.abs(payload.y) > 100 || Math.abs(payload.z) > (source.character === SIMON ? 285 : 250) ||
             [payload.dx, payload.dy, payload.dz].some(value => Math.abs(value) > 1.01)) return;
 
         member.effectTimes.push(now);
         socket.to(room.id).emit(event, {
             playerId: socket.id,
+            ...(bot ? { sourceBotSlot: bot.slot } : {}),
             x: payload.x,
             y: payload.y,
             z: payload.z,
@@ -255,6 +264,29 @@ function createMatchmaker(io, options = {}) {
             duration: payload.duration,
             color: payload.color
         });
+    }
+
+    function mineEffect(socket, payload) {
+        const roomId = socketRooms.get(socket.id);
+        const room = roomId && activeRooms.get(roomId);
+        const member = room && room.members.find(item => item.id === socket.id);
+        if (!room || !room.started || !member || !Number.isSafeInteger(payload?.id) || payload.id < 1) return;
+        const bot = payload.sourceBotSlot == null ? null : room.bots.get(payload.sourceBotSlot);
+        if (payload.sourceBotSlot != null && (!bot || room.hostId !== socket.id)) return;
+        const source = bot || member;
+        if (source.character !== SIMON) return;
+        const identity = { playerId: socket.id, sourceBotSlot: bot ? bot.slot : null, id: payload.id };
+        if (payload.remove === true) {
+            socket.to(room.id).emit("combat:mine", { ...identity, remove: true });
+            return;
+        }
+        if (!source.alive || !Number.isFinite(payload.x) || !Number.isFinite(payload.z) ||
+            Math.hypot(payload.x - source.state.x, payload.z - source.state.z) > 15) return;
+        socket.to(room.id).emit("combat:mine", { ...identity, x: payload.x, z: payload.z });
+    }
+
+    function simonAttack(source, payload) {
+        return source.character === SIMON && ["sniper", "volundr", "mine"].includes(payload?.attack);
     }
 
     function botStates(socket, payload) {
@@ -271,9 +303,9 @@ function createMatchmaker(io, options = {}) {
             const values = [item?.x, item?.y, item?.z, item?.yaw];
             if (!bot || !bot.alive || !values.every(Number.isFinite)) continue;
             bot.state = {
-                x: Math.max(-220, Math.min(220, item.x)),
+                x: Math.max(bot.character === SIMON ? -280 : -220, Math.min(bot.character === SIMON ? 280 : 220, item.x)),
                 y: Math.max(-35, Math.min(50, item.y)),
-                z: Math.max(-220, Math.min(220, item.z)),
+                z: Math.max(bot.character === SIMON ? -280 : -220, Math.min(bot.character === SIMON ? 280 : 220, item.z)),
                 yaw: Math.max(-Math.PI * 2, Math.min(Math.PI * 2, item.yaw)),
                 tf: item.tf === true
             };
@@ -299,12 +331,13 @@ function createMatchmaker(io, options = {}) {
         if (payload?.sourceBotSlot != null && !source) return;
 
         const from = source ? source.state : attacker.state;
-        if (Math.hypot(from.x - bot.state.x, from.y - bot.state.y, from.z - bot.state.z) > 100) return;
+        const special = simonAttack(source || attacker, payload);
+        if (Math.hypot(from.x - bot.state.x, from.y - bot.state.y, from.z - bot.state.z) > (special ? 800 : 100)) return;
         if (source && room.mode === "squad" && Math.floor(source.slot / 5) === Math.floor(bot.slot / 5)) return;
 
         const rawDamage = Number(payload.damage);
         if (!Number.isFinite(rawDamage) || rawDamage <= 0) return;
-        const damage = Math.max(1, Math.min(75, rawDamage));
+        const damage = special && payload.attack === "volundr" ? 100 : special && payload.attack === "mine" ? 50 : Math.max(1, Math.min(75, rawDamage));
         bot.hp = Math.max(0, bot.hp - damage);
         bot.alive = bot.hp > 0;
         io.to(room.id).emit("bot:health", {
@@ -324,11 +357,12 @@ function createMatchmaker(io, options = {}) {
         const source = room.bots.get(payload?.sourceBotSlot);
         if (!target || !source || !source.alive || target.invulnerableUntil > Date.now()) return;
         if (room.mode === "squad" && Math.floor(source.slot / 5) === Math.floor(target.slot / 5)) return;
-        if (Math.hypot(source.state.x - target.state.x, source.state.y - target.state.y, source.state.z - target.state.z) > 100) return;
+        const special = simonAttack(source, payload);
+        if (Math.hypot(source.state.x - target.state.x, source.state.y - target.state.y, source.state.z - target.state.z) > (special ? 800 : 100)) return;
 
         const rawDamage = Number(payload.damage);
         if (!Number.isFinite(rawDamage) || rawDamage <= 0) return;
-        const damage = Math.max(1, Math.min(75, rawDamage));
+        const damage = special && payload.attack === "volundr" ? 100 : special && payload.attack === "mine" ? 50 : Math.max(1, Math.min(75, rawDamage));
         target.hp = Math.max(0, target.hp - damage);
         target.alive = target.hp > 0;
         changeHost(room);
@@ -371,11 +405,12 @@ function createMatchmaker(io, options = {}) {
         if (attacker.hitTimes.length >= 20) return;
         const a = attacker.state;
         const b = target.state;
-        if (Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) > 100) return;
+        const special = simonAttack(attacker, payload);
+        if (Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) > (special ? 800 : 100)) return;
 
         const rawDamage = Number(payload.damage);
         if (!Number.isFinite(rawDamage) || rawDamage <= 0) return;
-        const damage = Math.max(1, Math.min(75, rawDamage));
+        const damage = special && payload.attack === "volundr" ? 100 : special && payload.attack === "mine" ? 50 : Math.max(1, Math.min(75, rawDamage));
         attacker.hitTimes.push(now);
         target.hp = Math.max(0, target.hp - damage);
         target.alive = target.hp > 0;
@@ -494,6 +529,7 @@ function createMatchmaker(io, options = {}) {
         socket.on("player:state", payload => state(socket, payload));
         socket.on("combat:shot", payload => relayCombatEffect(socket, payload, "combat:shot"));
         socket.on("combat:beam", payload => relayCombatEffect(socket, payload, "combat:beam"));
+        socket.on("combat:mine", payload => mineEffect(socket, payload));
         socket.on("combat:meteor", payload => meteor(socket, payload));
         socket.on("bots:state", payload => botStates(socket, payload));
         socket.on("combat:hit", payload => hit(socket, payload));
