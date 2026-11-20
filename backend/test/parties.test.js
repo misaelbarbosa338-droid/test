@@ -138,6 +138,11 @@ test("shares a four-player squad lobby and blocks starting until everyone is rea
     assert.deepEqual(partyStates.get(leader.id).party.members.map(member => member.name), [
         "Jogador 0", "Jogador 1", "Jogador 2", "Jogador 3"
     ]);
+    for (const socket of [leader, ...members.slice(0, 3)]) {
+        assert.deepEqual(partyStates.get(socket.id).party.members.map(member => member.name), [
+            "Jogador 0", "Jogador 1", "Jogador 2", "Jogador 3"
+        ]);
+    }
     assert.equal(partyStates.get(members[0].id).party.scene, 2);
     assert.equal(partyStates.get(members[0].id).party.members[1].character, 2);
     assert.equal(request(leader, "party:invite", {

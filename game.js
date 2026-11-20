@@ -617,6 +617,7 @@ socketReady.then(socket=>{
    $('partner-side').classList.add('is-open');
    $('partner-toggle').setAttribute('aria-expanded','true');
   }
+  syncPartyLobbyPreview();
   if($('lobby').style.display!=='none')ui();
   renderFriendPanel()
  });
@@ -1860,7 +1861,7 @@ function hud(){
  $('feed').innerHTML=feed.slice(-5).map(f=>'<div>'+escapeHtml(f.s)+'</div><br>').join('');
  const k=130/(AH*2);mmc.fillStyle='#8a8478';mmc.fillRect(0,0,130,130);mmc.strokeStyle='#f33';mmc.lineWidth=2;mmc.strokeRect((AH-zc)*k,(AH-zc)*k,zc*2*k,zc*2*k);
  for(const p of P){if(!p.alive)continue;const a=p.team==me.team;if(!a&&(p.ch.n==='Simon'&&p.tf||Math.hypot(p.x-me.x,p.z-me.z)>70))continue;mmc.fillStyle=p===me?'#ffd23a':a?'#2ecc40':'#f33';mmc.fillRect((p.x+AH)*k-2,(p.z+AH)*k-2,4,4)}}
-let vo=0,pv=null,pvp=null,cdn=0,cyw=0,cpt=.3,shake=0,cut=null;
+let vo=0,pv=null,pvp=null,lobbyPartyModels=[],cdn=0,cyw=0,cpt=.3,shake=0,cut=null;
 // cutscene de abertura: sobrevoo da arena durante os 5 segundos
 const NM=['ARENA DO TORNEIO','CIDADE EM RUÍNAS','FLORESTA','GELO','CAMPO DE TREINO'];let introN=0;
 function introCam(){
@@ -2793,6 +2794,19 @@ function fusUpd(){
   s.A.visible=s.B.visible=false;const q=t-2.2;fGlow.visible=true;fGlow.position.set(0,3,2);fGlow.scale.setScalar(4+q*70);fGlow.material.opacity=Math.max(0,1-q/.6);
   if(!s.fl){s.fl=true;sfx(300,.6,'triangle',.3)}
   if(q>.65)endFus()}}
+function syncPartyLobbyPreview(){
+ lobbyPartyModels.forEach(model=>scene.remove(model));lobbyPartyModels=[];
+ if(state!=='lobby'||!partyState.party)return;
+ const members=partyState.party.members.filter(member=>member.profileId!==profile.id),count=members.length;
+ members.forEach((member,index)=>{
+  const c=CH[member.character];if(!c)return;
+  const model=mk(c,0);applyFormStyle(model,member.form||0,c);
+  model.userData.ring.visible=false;model.userData.au.visible=false;
+  model.scale.setScalar(1.05*(BASE[c.n]||1));
+  model.position.set((index-(count-1)/2)*3.4,0,-1.2);
+  scene.add(model);lobbyPartyModels.push(model)
+ })
+}
 function prev(){endFus();const c=CH[sel],forms=formsFor(c);if(pv)scene.remove(pv);pv=mk(c,0);applyFormStyle(pv,formSel,c);pv.userData.ring.visible=false;pv.userData.au.visible=false;pv.scale.setScalar(1.45*(BASE[c.n]||1));pvp={m:pv,ix:0,iz:0,y:0,x:0,ch:c,form:formSel,tf:false,charge:false,ki:0,sh:0,mc:0};scene.add(pv);
  $('info').innerHTML='<div class="nm">'+c.n.toUpperCase()+'</div><div class="form-picker">'+forms.map((form,i)=>'<button type="button" class="form-choice'+(formSel===i?' on':'')+'" style="--form-color:'+hx(form.glow||c.fc)+'" data-form="'+i+'">'+form.n+'</button>').join('')+'</div><div class="fm">Estilo: <b style="color:'+hx(forms[formSel].glow||c.fc)+'">'+forms[formSel].n.toUpperCase()+'</b></div>'+(c.n==='Simon'?'<div class="fm" style="font-size:12px;line-height:1.2">E: mirar · Clique: sniper (1s) · Q: Volundr (3 tiros)<br>Z: Mina Terrestre · T: Morte Branca (30s)</div>':'');
  $('info').querySelectorAll('[data-form]').forEach(button=>button.onclick=()=>{formSel=Number(button.dataset.form);prev();emitPartySelection()});
