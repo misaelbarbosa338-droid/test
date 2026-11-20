@@ -4,6 +4,8 @@ const http = require("http");
 const path = require("path");
 const { Server } = require("socket.io");
 const { createMatchmaker } = require("./matchmaker");
+const { createFriendService } = require("./friends");
+const { createPartyService } = require("./parties");
 
 const app = express();
 const server = http.createServer(app);
@@ -11,6 +13,8 @@ const frontend = path.resolve(__dirname, "..");
 
 const io = new Server(server);
 const matchmaker = createMatchmaker(io);
+const friends = createFriendService();
+const parties = createPartyService({ friends, matchmaker });
 
 app.get("/", (req, res) => {
     res.sendFile(path.join(frontend, "index.html"));
@@ -25,6 +29,8 @@ for (const asset of ["game.js", "style.css"]) {
 io.on("connection", (socket) => {
     console.log("Jogador conectado:", socket.id);
     matchmaker.attach(socket);
+    parties.attach(socket);
+    friends.attach(socket);
 });
 
 if (require.main === module) {
@@ -34,4 +40,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { app, server, io, matchmaker };
+module.exports = { app, server, io, matchmaker, friends, parties };

@@ -37,8 +37,8 @@ test("real Socket.IO clients join the same room and receive live combat updates"
         new Promise(resolve => second.once("matchmaking:started", resolve))
     ]);
     const options = { mode: "solo", scene: 0, character: 0, form: 2 };
-    first.emit("matchmaking:join", options);
-    second.emit("matchmaking:join", options);
+    first.emit("matchmaking:join", { ...options, profileId: "94f1f2df-8a3c-4c79-9e45-53ab8851bb6a", name: "Jogador Azul" });
+    second.emit("matchmaking:join", { ...options, profileId: "0ce2c775-4a2d-44a5-b363-455a54c55719", name: "Jogador Verde" });
     const [firstMatch, secondMatch] = await started;
 
     assert.equal(firstMatch.roomId, secondMatch.roomId);
@@ -46,6 +46,13 @@ test("real Socket.IO clients join the same room and receive live combat updates"
     assert.equal(firstMatch.totalPlayers, 50);
     assert.equal(firstMatch.players[0].form, 2);
     assert.equal(firstMatch.players[1].form, 2);
+    assert.deepEqual(firstMatch.players.map(player => player.name).sort(), ["Jogador Azul", "Jogador Verde"]);
+    assert.equal(new Set(firstMatch.players.map(player => player.profileId)).size, 2);
+
+    const destruction = { index: 4, x: 90, z: -90 };
+    const receivedDestruction = new Promise(resolve => second.once("terrain:destroyed", resolve));
+    first.emit("terrain:destroyed", destruction);
+    assert.deepEqual(await receivedDestruction, destruction);
 
     const shot = {
         x: 1, y: 2, z: 3, vx: 0, vy: 0, vz: -50,

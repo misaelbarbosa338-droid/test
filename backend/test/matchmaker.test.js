@@ -118,6 +118,27 @@ test("keeps independent queues and starts a room with its roster after the timer
     assert.equal(matchmaker.waitingRooms.has("squad:0"), true);
 });
 
+test("assigns unique profile IDs and carries real player names into the roster", () => {
+    const { connect, matchmaker } = harness({ maxPlayers: 2 });
+    const first = connect("first");
+    const second = connect("second");
+    let firstMatch;
+    let secondMatch;
+    first.on("matchmaking:started", data => { firstMatch = data; });
+    second.on("matchmaking:started", data => { secondMatch = data; });
+    const profileId = "94f1f2df-8a3c-4c79-9e45-53ab8851bb6a";
+
+    const firstJoin = queue(first, { profileId, name: "Jogador Azul" });
+    const secondJoin = queue(second, { profileId, name: "Jogador Verde" });
+
+    assert.equal(firstJoin.profileId, profileId);
+    assert.notEqual(secondJoin.profileId, profileId);
+    assert.notEqual(firstJoin.profileId, secondJoin.profileId);
+    assert.deepEqual(firstMatch.players.map(player => player.name), ["Jogador Azul", "Jogador Verde"]);
+    assert.deepEqual(firstMatch.players.map(player => player.profileId), [firstJoin.profileId, secondJoin.profileId]);
+    assert.deepEqual(secondMatch.players.map(player => player.profileId), [firstJoin.profileId, secondJoin.profileId]);
+});
+
 test("accepts the Black, Guardiã and Chablau character indexes in matchmaking", () => {
     const { connect, matchmaker } = harness();
     queue(connect("black"), { character: 15 });
@@ -142,6 +163,32 @@ test("starts full rooms at thirty real players and puts the next player in a new
     assert.equal(started[0].totalPlayers, 50);
     assert.equal(matchmaker.activeRooms.get(started[0].roomId).botSlots.length, 20);
     assert.equal(matchmaker.waitingRooms.get("solo:0").members.length, 1);
+});
+
+test("keeps a party together when it would cross a four-player team boundary", () => {
+    const { connect, matchmaker } = harness();
+    const first = connect("first");
+    const second = connect("second");
+    let previousMatch;
+    first.on("matchmaking:started", data => { previousMatch = data; });
+    queue(first, { mode: "squad", scene: 1 });
+    queue(second, { mode: "squad", scene: 1 });
+
+    const party = [connect("party-1"), connect("party-2"), connect("party-3")].map((socket, index) => ({
+        socket,
+        profileId: `94f1f2df-8a3c-4c79-9e45-53ab8851bb6${index}`,
+        name: `Party ${index + 1}`,
+        character: index,
+        form: 0
+    }));
+    const result = matchmaker.joinParty(party, { mode: "squad", scene: 1 });
+
+    assert.equal(result.ok, true);
+    assert.equal(previousMatch.players.length, 2);
+    const room = matchmaker.waitingRooms.get("squad:1");
+    assert.equal(room.members.length, 3);
+    matchmaker.startRoom(room);
+    assert.deepEqual(room.members.map(member => Math.floor(member.slot / 4)), [0, 0, 0]);
 });
 
 test("x1 waits for two real players and starts without bots", () => {

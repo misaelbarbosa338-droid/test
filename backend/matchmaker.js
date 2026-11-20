@@ -3,7 +3,9 @@ const { randomBytes, randomUUID } = require("node:crypto");
 const CHARACTER_COUNT = 18;
 const FORM_COUNT = 4;
 const SIMON = 6;
+const SQUAD_SIZE = 4;
 const MODES = new Set(["solo", "squad", "x1"]);
+const PROFILE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHOT_STYLES = new Set(["orb", "beam", "disc", "bolt", "fire", "slash", "wolf", "knife", "arrow"]);
 
 function createMatchmaker(io, options = {}) {
@@ -17,6 +19,28 @@ function createMatchmaker(io, options = {}) {
     const roomsById = new Map();
     const socketRooms = new Map();
 
+    function profileIdInUse(profileId) {
+        return [...roomsById.values()].some(room =>
+            room.members.some(member => !member.left && member.profileId === profileId));
+    }
+
+    function assignProfileId(value) {
+        const requested = typeof value === "string" && PROFILE_ID_RE.test(value) ? value.toLowerCase() : randomUUID();
+        if (!profileIdInUse(requested)) return requested;
+        let profileId;
+        do {
+            profileId = randomUUID();
+        } while (profileIdInUse(profileId));
+        return profileId;
+    }
+
+    function sanitizePlayerName(value) {
+        const name = typeof value === "string"
+            ? value.replace(/[\u0000-\u001f\u007f<>]/g, "").trim().replace(/\s+/g, " ").slice(0, 24)
+            : "";
+        return name || "Jogador";
+    }
+
     function status(room) {
         io.to(room.id).emit("matchmaking:waiting", {
             roomId: room.id,
@@ -25,6 +49,23 @@ function createMatchmaker(io, options = {}) {
             maxPlayers: room.mode === "x1" ? 2 : maxPlayers,
             remainingMs: room.mode === "x1" ? null : Math.max(0, room.deadline - Date.now())
         });
+    }
+
+    function createWaitingRoom(mode, scene) {
+        const key = `${mode}:${scene}`;
+        const room = {
+            id: randomUUID(),
+            mode,
+            scene,
+            members: [],
+            started: false,
+            deadline: mode === "x1" ? null : Date.now() + waitMs,
+            timer: null
+        };
+        if (mode !== "x1") room.timer = setTimer(() => startRoom(room), waitMs);
+        waitingRooms.set(key, room);
+        roomsById.set(room.id, room);
+        return room;
     }
 
     function cleanupWaitingRoom(room) {
@@ -57,8 +98,9 @@ function createMatchmaker(io, options = {}) {
             member.spawnState = { ...member.state };
             return {
                 id: member.id,
+                profileId: member.profileId,
                 slot,
-                name: `Lutador ${slot + 1}`,
+                name: member.name,
                 character: member.character,
                 form: member.form,
                 x: member.state.x,
@@ -169,13 +211,79 @@ function createMatchmaker(io, options = {}) {
             roomsById.set(room.id, room);
         }
 
-        const member = { id: socket.id, socket, character, form, hp: 100, alive: true };
+        const member = {
+            id: socket.id,
+            profileId: assignProfileId(data?.profileId),
+            name: sanitizePlayerName(data?.name),
+            socket,
+            character,
+            form,
+            hp: 100,
+            alive: true
+        };
         room.members.push(member);
         socketRooms.set(socket.id, room.id);
         socket.join(room.id);
-        acknowledge?.({ ok: true, roomId: room.id });
+        acknowledge?.({ ok: true, roomId: room.id, profileId: member.profileId });
         status(room);
         if (room.members.length >= roomMaxPlayers) startRoom(room);
+    }
+
+    function joinParty(partyMembers, data) {
+        const mode = data?.mode;
+        const scene = Number(data?.scene);
+        if (mode !== "squad" || !Number.isInteger(scene) || scene < 0 || scene > 3 ||
+            !Array.isArray(partyMembers) || partyMembers.length < 2 || partyMembers.length > SQUAD_SIZE) {
+            return { ok: false, error: "Configuração do esquadrão inválida." };
+        }
+        if (partyMembers.length > maxPlayers) {
+            return { ok: false, error: "O esquadrão excede o limite de jogadores da fila." };
+        }
+
+        const socketIds = new Set();
+        for (const player of partyMembers) {
+            const character = Number(player?.character);
+            const form = player?.form == null ? 0 : Number(player.form);
+            if (!player?.socket?.id || !player.socket.connected || socketIds.has(player.socket.id) ||
+                socketRooms.has(player.socket.id) ||
+                !Number.isInteger(character) || character < 0 || character >= CHARACTER_COUNT ||
+                !Number.isInteger(form) || form < 0 || form >= FORM_COUNT) {
+                return { ok: false, error: "Um integrante do esquadrão não pode entrar na partida." };
+            }
+            socketIds.add(player.socket.id);
+        }
+
+        const key = `${mode}:${scene}`;
+        const roomMaxPlayers = maxPlayers;
+        let room = waitingRooms.get(key);
+        const crossesTeamBoundary = room && room.members.length % SQUAD_SIZE + partyMembers.length > SQUAD_SIZE;
+        const exceedsRoomCapacity = room && room.members.length + partyMembers.length > roomMaxPlayers;
+        if (room && !room.started && room.members.length > 0 && (exceedsRoomCapacity || crossesTeamBoundary)) {
+            startRoom(room);
+        }
+        if (!room || room.started || exceedsRoomCapacity || crossesTeamBoundary) {
+            room = createWaitingRoom(mode, scene);
+        }
+
+        for (const player of partyMembers) {
+            const member = {
+                id: player.socket.id,
+                profileId: assignProfileId(player.profileId),
+                name: sanitizePlayerName(player.name),
+                socket: player.socket,
+                character: Number(player.character),
+                form: player.form == null ? 0 : Number(player.form),
+                hp: 100,
+                alive: true
+            };
+            room.members.push(member);
+            socketRooms.set(player.socket.id, room.id);
+            player.socket.join(room.id);
+        }
+
+        status(room);
+        if (room.members.length >= roomMaxPlayers) startRoom(room);
+        return { ok: true, roomId: room.id };
     }
 
     function state(socket, payload) {
@@ -266,6 +374,17 @@ function createMatchmaker(io, options = {}) {
         });
     }
 
+    function terrainDestroyed(socket, payload) {
+        const roomId = socketRooms.get(socket.id);
+        const room = roomId && activeRooms.get(roomId);
+        const member = room && room.members.find(item => item.id === socket.id);
+        if (!room || !room.started || !member || !Number.isInteger(payload?.index) ||
+            payload.index < 0 || payload.index > 1000 ||
+            !Number.isFinite(payload.x) || !Number.isFinite(payload.z) ||
+            Math.abs(payload.x) > 300 || Math.abs(payload.z) > 300) return;
+        socket.to(room.id).emit("terrain:destroyed", { index: payload.index, x: payload.x, z: payload.z });
+    }
+
     function mineEffect(socket, payload) {
         const roomId = socketRooms.get(socket.id);
         const room = roomId && activeRooms.get(roomId);
@@ -333,7 +452,7 @@ function createMatchmaker(io, options = {}) {
         const from = source ? source.state : attacker.state;
         const special = simonAttack(source || attacker, payload);
         if (Math.hypot(from.x - bot.state.x, from.y - bot.state.y, from.z - bot.state.z) > (special ? 800 : 100)) return;
-        if (source && room.mode === "squad" && Math.floor(source.slot / 5) === Math.floor(bot.slot / 5)) return;
+        if (source && room.mode === "squad" && Math.floor(source.slot / SQUAD_SIZE) === Math.floor(bot.slot / SQUAD_SIZE)) return;
 
         const rawDamage = Number(payload.damage);
         if (!Number.isFinite(rawDamage) || rawDamage <= 0) return;
@@ -356,7 +475,7 @@ function createMatchmaker(io, options = {}) {
         const target = room.members.find(member => member.id === payload?.targetId && member.alive);
         const source = room.bots.get(payload?.sourceBotSlot);
         if (!target || !source || !source.alive || target.invulnerableUntil > Date.now()) return;
-        if (room.mode === "squad" && Math.floor(source.slot / 5) === Math.floor(target.slot / 5)) return;
+        if (room.mode === "squad" && Math.floor(source.slot / SQUAD_SIZE) === Math.floor(target.slot / SQUAD_SIZE)) return;
         const special = simonAttack(source, payload);
         if (Math.hypot(source.state.x - target.state.x, source.state.y - target.state.y, source.state.z - target.state.z) > (special ? 800 : 100)) return;
 
@@ -398,7 +517,7 @@ function createMatchmaker(io, options = {}) {
         const attacker = room.members.find(item => item.id === socket.id && item.alive);
         const target = room.members.find(item => item.id === payload?.targetId && item.alive);
         if (!attacker || !target || attacker === target || target.invulnerableUntil > Date.now()) return;
-        if (room.mode === "squad" && Math.floor(attacker.slot / 5) === Math.floor(target.slot / 5)) return;
+        if (room.mode === "squad" && Math.floor(attacker.slot / SQUAD_SIZE) === Math.floor(target.slot / SQUAD_SIZE)) return;
 
         const now = Date.now();
         attacker.hitTimes = (attacker.hitTimes || []).filter(time => now - time < 1000);
@@ -486,7 +605,7 @@ function createMatchmaker(io, options = {}) {
 
             for (const target of room.members) {
                 if (!target.alive || target === member ||
-                    (room.mode === "squad" && Math.floor(target.slot / 5) === Math.floor(member.slot / 5)) ||
+                    (room.mode === "squad" && Math.floor(target.slot / SQUAD_SIZE) === Math.floor(member.slot / SQUAD_SIZE)) ||
                     Math.hypot(target.state.x - payload.targetX, target.state.z - payload.targetZ) >= 18) continue;
 
                 const damage = target.hp * 0.5;
@@ -504,7 +623,7 @@ function createMatchmaker(io, options = {}) {
 
             for (const bot of room.bots.values()) {
                 if (!bot.alive ||
-                    (room.mode === "squad" && Math.floor(bot.slot / 5) === Math.floor(member.slot / 5)) ||
+                    (room.mode === "squad" && Math.floor(bot.slot / SQUAD_SIZE) === Math.floor(member.slot / SQUAD_SIZE)) ||
                     Math.hypot(bot.state.x - payload.targetX, bot.state.z - payload.targetZ) >= 18) continue;
 
                 const damage = bot.hp * 0.5;
@@ -529,6 +648,7 @@ function createMatchmaker(io, options = {}) {
         socket.on("player:state", payload => state(socket, payload));
         socket.on("combat:shot", payload => relayCombatEffect(socket, payload, "combat:shot"));
         socket.on("combat:beam", payload => relayCombatEffect(socket, payload, "combat:beam"));
+        socket.on("terrain:destroyed", payload => terrainDestroyed(socket, payload));
         socket.on("combat:mine", payload => mineEffect(socket, payload));
         socket.on("combat:meteor", payload => meteor(socket, payload));
         socket.on("bots:state", payload => botStates(socket, payload));
@@ -541,7 +661,7 @@ function createMatchmaker(io, options = {}) {
         socket.on("disconnect", () => leave(socket, "disconnected"));
     }
 
-    return { attach, startRoom, waitingRooms, activeRooms };
+    return { attach, startRoom, joinParty, waitingRooms, activeRooms };
 }
 
 module.exports = { createMatchmaker };
