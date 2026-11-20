@@ -374,19 +374,31 @@ document.head.insertAdjacentHTML('beforeend','<style>#chips{display:none}#partne
 const MOB=(('ontouchstart' in window)||navigator.maxTouchPoints>0)&&(!window.matchMedia||matchMedia('(pointer:coarse)').matches);
 document.head.insertAdjacentHTML('beforeend','<style>html,body{overscroll-behavior:none;touch-action:none}#rot{position:fixed;inset:0;z-index:200;background:#050816;color:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;font:700 22px Rajdhani,Arial,sans-serif;gap:14px}#rot b{font-size:64px;animation:rt 1.6s ease-in-out infinite}@keyframes rt{0%,100%{transform:rotate(0)}50%{transform:rotate(-90deg)}}#toast2{position:fixed;left:50%;bottom:20%;transform:translateX(-50%);z-index:300;background:#000d;padding:10px 18px;border:1px solid #ffb400;font:600 15px Rajdhani,Arial,sans-serif;max-width:80vw;text-align:center;display:none}@media(max-height:520px){.ffm button{width:64px;padding:6px 2px;font-size:10px}.ffm button b{font-size:18px}.ffm{top:96px}.ffp{transform:scale(.8);transform-origin:left top}.rbar{top:70px!important}#info{bottom:92px;padding:4px 40px}#info .nm{font-size:22px}#modes{bottom:50px}#modes .btn{padding:6px 18px;font-size:14px}#go{padding:10px 36px;font-size:20px}#golbl{bottom:58px}#hint,#slots{display:none}.arw{width:36px;height:56px}.ffpn{top:96px;left:100px;max-height:50vh}}</style>');
 document.head.insertAdjacentHTML('beforeend','<style>@media(max-height:520px){#rank-summary{bottom:94px;transform:scale(.8);transform-origin:right bottom}}.profile-name-row input{user-select:text}.profile-logout{width:100%;margin-top:16px;border-color:#ff5964;color:#ff8a91;font-style:normal}</style>');
-document.body.insertAdjacentHTML('beforeend','<div id="rot"><b>📱</b><div>Gire o celular na horizontal<br><small style="font-weight:500;opacity:.7">O jogo funciona em modo paisagem</small></div></div><div id="toast2"></div>');
+document.body.insertAdjacentHTML('beforeend','<div id="rot"><b>📱</b><div>Toque na tela para ativar o modo paisagem<br><small style="font-weight:500;opacity:.7">Se não virar automaticamente, gire o celular na horizontal</small></div></div><div id="toast2"></div>');
 const FSEL=()=>document.fullscreenElement||document.webkitFullscreenElement;
 function toast2(t){const e=$('toast2');e.textContent=t;e.style.display='block';clearTimeout(toast2.t);toast2.t=setTimeout(()=>{e.style.display='none'},3800)}
 async function goFull(){
  const el=document.documentElement,rq=el.requestFullscreen||el.webkitRequestFullscreen;
- try{
-  if(rq)await rq.call(el);
-  if(MOB&&screen.orientation&&screen.orientation.lock)await screen.orientation.lock('landscape');
- }catch(e){toast2('O navegador não permitiu ativar a tela cheia ou a orientação automática. Para melhor experiência, abra o jogo em tela cheia.')}
+ let fullError=false,orientationError=false;
+ if(!FSEL()&&!navigator.standalone&&!(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)){
+  if(!rq)fullError=true;
+  else try{await rq.call(el)}catch(e){console.warn('Não foi possível ativar a tela cheia:',e);fullError=true}
+ }
+ if(MOB){
+  if(screen.orientation&&screen.orientation.lock){
+   try{await screen.orientation.lock('landscape')}catch(e){console.warn('Não foi possível ativar a orientação horizontal:',e);orientationError=true}
+  }else if(innerHeight>innerWidth)orientationError=true;
+ }
+ if(fullError&&orientationError)toast2('O navegador não permitiu tela cheia ou rotação automática. Gire o celular na horizontal.');
+ else if(fullError)toast2('Este navegador não permitiu a tela cheia. No iPhone, adicione o jogo à Tela de Início.');
+ else if(orientationError)toast2('Não foi possível virar automaticamente. Gire o celular na horizontal.');
 }
 function chkRot(){$('rot').style.display=(MOB&&innerHeight>innerWidth)?'flex':'none'}
 addEventListener('resize',chkRot);addEventListener('orientationchange',chkRot);chkRot();
-let autoFs=false;document.addEventListener('pointerdown',()=>{if(MOB&&!window.androidBridge&&!autoFs&&!FSEL()){autoFs=true;goFull()}});
+let autoFs=false;
+function startDisplayMode(){if(!window.androidBridge&&!autoFs){autoFs=true;goFull()}}
+document.addEventListener('pointerdown',startDisplayMode,true);
+document.addEventListener('keydown',startDisplayMode,true);
 const PN=['chars','maps','missions','ranks'];
 function renderProfile(){
  $('profile-button-name').textContent=profile.name;
