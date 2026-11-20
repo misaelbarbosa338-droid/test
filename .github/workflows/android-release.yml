@@ -29,8 +29,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Sync Capacitor
-        run: npx cap sync android
+      - name: Build and sync Capacitor
+        run: npm run cap:sync
 
       - name: Decode signing key
         env:
