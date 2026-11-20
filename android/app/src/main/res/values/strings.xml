@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Dragon Ball Royale 3D</string>
+    <string name="title_activity_main">Dragon Ball Royale 3D</string>
+    <string name="package_name">com.origenzero.game</string>
+    <string name="custom_url_scheme">com.origenzero.game</string>
+</resources>

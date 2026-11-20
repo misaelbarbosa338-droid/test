@@ -12,17 +12,38 @@ const app = express();
 const server = http.createServer(app);
 const frontend = path.resolve(__dirname, "..");
 
-const io = new Server(server);
+const io = new Server(server, {
+    cors: {
+        origin: ["https://localhost"],
+        methods: ["GET", "POST"]
+    }
+});
 const matchmaker = createMatchmaker(io);
 const accounts = createAccountService();
 const friends = createFriendService({ accounts });
 const parties = createPartyService({ friends, matchmaker });
 
+app.use((req, res, next) => {
+    if (req.get("Origin") !== "https://localhost") {
+        next();
+        return;
+    }
+    res.setHeader("Access-Control-Allow-Origin", "https://localhost");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Vary", "Origin");
+    if (req.method === "OPTIONS") {
+        res.sendStatus(204);
+        return;
+    }
+    next();
+});
+
 app.get("/", (req, res) => {
     res.sendFile(path.join(frontend, "index.html"));
 });
 
-for (const asset of ["game.js", "style.css"]) {
+for (const asset of ["app-config.js", "game.js", "style.css"]) {
     app.get(`/${asset}`, (req, res) => {
         res.sendFile(path.join(frontend, asset));
     });

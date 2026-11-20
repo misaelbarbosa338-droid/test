@@ -667,7 +667,8 @@ $('auth-form').onsubmit=async event=>{
  if(!password){$('auth-error').textContent='Digite uma senha.';return}
  authBusy=true;$('auth-submit').disabled=true;$('auth-error').textContent='';
  try{
-  const response=await fetch('/api/account/'+authMode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,password})});
+  const serverUrl=window.GAME_SERVER_URL||location.origin;
+  const response=await fetch(serverUrl+'/api/account/'+authMode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,password})});
   const result=await response.json().catch(()=>null);
   if(!result||!result.ok){
    $('auth-error').textContent=result&&result.error||'Não foi possível conectar ao servidor.';
@@ -2803,7 +2804,7 @@ function syncPartyLobbyPreview(){
   const model=mk(c,0);applyFormStyle(model,member.form||0,c);
   model.userData.ring.visible=false;model.userData.au.visible=false;
   model.scale.setScalar(1.05*(BASE[c.n]||1));
-  model.position.set((index-(count-1)/2)*3.4,0,-1.2);
+  model.position.set((index-(count-1)/2)*3.4,0,-2.2);
   scene.add(model);lobbyPartyModels.push(model)
  })
 }

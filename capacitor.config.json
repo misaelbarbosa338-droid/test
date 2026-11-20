@@ -1,0 +1,8 @@
+{
+  "appId": "com.origenzero.game",
+  "appName": "Dragon Ball Royale 3D",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

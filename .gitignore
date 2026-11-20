@@ -1,3 +1,5 @@
+node_modules/
+www/
 backend/data/friends.json
 backend/data/friends.json.*.tmp
 backend/data/accounts.json
