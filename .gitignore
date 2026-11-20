@@ -1,2 +1,4 @@
 backend/data/friends.json
 backend/data/friends.json.*.tmp
+backend/data/accounts.json
+backend/data/accounts.json.*.tmp

@@ -58,6 +58,7 @@ function cloneProfiles(profiles) {
 function createFriendService(options = {}) {
     const filePath = path.resolve(options.storePath || process.env.FRIENDS_STORE_PATH ||
         path.join(__dirname, "data", "friends.json"));
+    const accounts = options.accounts || null;
     let profiles = readProfiles(filePath);
     const socketsByProfile = new Map();
     const profileBySocket = new Map();
@@ -122,17 +123,25 @@ function createFriendService(options = {}) {
         for (const profileId of new Set(profileIds)) sendState(profileId);
     }
 
-    function acknowledgeError(acknowledge, message, error) {
+    function acknowledgeError(acknowledge, message, error, code) {
         if (error) console.error(message, error);
-        acknowledge?.({ ok: false, error: message });
+        acknowledge?.(code ? { ok: false, error: message, code } : { ok: false, error: message });
     }
 
     function register(socket, data, acknowledge) {
         const requestedId = typeof data?.profileId === "string" ? data.profileId.toLowerCase() : "";
-        const name = sanitizeName(data?.name);
+        let name = sanitizeName(data?.name);
         if (!PROFILE_ID_RE.test(requestedId)) {
             acknowledgeError(acknowledge, "ID de perfil inválido.");
             return;
+        }
+        if (accounts) {
+            const account = accounts.verifyToken(requestedId, data?.token);
+            if (!account) {
+                acknowledgeError(acknowledge, "Sessão expirada. Entre na sua conta novamente.", null, "auth");
+                return;
+            }
+            name = account.name;
         }
 
         const currentId = profileBySocket.get(socket.id);

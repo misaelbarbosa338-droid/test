@@ -243,6 +243,32 @@ function persistProfile(){
  catch(error){console.error('Não foi possível salvar o perfil do jogador.',error)}
 }
 persistProfile();
+const AUTH_STORAGE_KEY='dbr3_auth_v1',AUTH_NOTICE_KEY='dbr3_auth_notice';
+function loadAuth(){
+ try{
+  const stored=JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY)||'null');
+  if(stored&&typeof stored==='object'&&typeof stored.profileId==='string'&&PROFILE_ID_RE.test(stored.profileId)&&typeof stored.token==='string'&&stored.token&&typeof stored.name==='string'&&stored.name)
+   return{profileId:stored.profileId.toLowerCase(),token:stored.token,name:stored.name}
+ }catch(error){console.error('Não foi possível carregar a conta do jogador.',error)}
+ return null
+}
+let auth=loadAuth();
+if(auth){profile.id=auth.profileId;profile.name=auth.name;persistProfile()}
+function setAuth(session){
+ const switching=!!auth&&auth.profileId!==session.profileId;
+ auth={profileId:session.profileId.toLowerCase(),token:session.token,name:session.name};
+ try{localStorage.setItem(AUTH_STORAGE_KEY,JSON.stringify(auth))}
+ catch(error){console.error('Não foi possível salvar a conta do jogador.',error)}
+ if(switching)profile.history=[];
+ profile.id=auth.profileId;profile.name=auth.name;persistProfile()
+}
+function logoutAccount(notice){
+ try{
+  localStorage.removeItem(AUTH_STORAGE_KEY);localStorage.removeItem(PROFILE_STORAGE_KEY);
+  if(notice)sessionStorage.setItem(AUTH_NOTICE_KEY,notice)
+ }catch(error){console.error('Não foi possível sair da conta.',error)}
+ location.reload()
+}
 function recordBattleHistory(won,place,points){
  if(TRAIN)return;
  profile.history.unshift({date:new Date().toISOString(),mode,scene:scn,character:me.ch.n,won,place,kills:me.kills,points});
@@ -330,23 +356,24 @@ document.head.insertAdjacentHTML('beforeend',`<style>
 $('lobby').innerHTML=`<button class="ffp" id="profile-button" type="button"><div class="ffa">👤</div><span><small>PERFIL</small><strong id="profile-button-name"></strong></span></button>
 <div class="fftr"><div class="chip" id="chips"></div><button class="btn" id="partner-open" type="button">＋ ADICIONAR PARCEIRO</button><button class="btn" id="cfgb" type="button" title="Configurações" aria-label="Configurações">⚙</button></div>
 <div class="ffm"><button data-p="chars" class="on"><b>👤</b>PERSONAGENS</button><button data-p="maps"><b>🗺</b>CENÁRIOS</button><button data-p="missions"><b>📜</b>MISSÕES</button><button data-p="ranks"><b>🏆</b>PATENTES</button></div>
+<div class="ffm ffm-right"><button id="partner-toggle" type="button" aria-controls="partner-side" aria-expanded="false"><b>🤝</b>PARCEIROS</button></div>
 <div class="ffpn" id="pchars" style="display:block"><div class="row" id="cards"></div></div><div class="ffpn" id="pmaps"><div class="row" id="scns"></div></div><div class="ffpn" id="pmissions"></div><div class="ffpn" id="pranks"></div>
 <button class="arw l" id="pl">◀</button><button class="arw r" id="pr">▶</button>
 <div id="info"></div><div id="modes"></div><div id="slots"></div>
 <div id="hint">Fila de até 15s · até 30 jogadores reais; bots completam 50 (exceto X1) · WASD mover · Clique atira · Q especial · E carrega ki · Arraste no centro para girar o personagem</div>
 <div id="golbl"></div><button id="go">INICIAR</button>
 <div id="rank-summary"><div class="rank-mark">★</div><div><div id="rank"></div><div class="rbar"><div id="rb"></div></div></div></div>
-<div id="profile-modal"><section class="profile-card" role="dialog" aria-modal="true" aria-labelledby="profile-title"><div class="profile-head"><h2 id="profile-title">PERFIL</h2><button class="btn" id="profile-close" type="button">FECHAR</button></div><div class="profile-name-row"><input id="profile-name-input" type="text" maxlength="24" aria-label="Nome do jogador"><button class="btn on" id="profile-save" type="button">SALVAR</button></div><div class="profile-id">ID DO JOGADOR<code id="profile-id"></code></div><h3 class="profile-history-title">HISTÓRICO DE BATALHAS</h3><div class="profile-history" id="profile-history"></div></section></div>
+<div id="profile-modal"><section class="profile-card" role="dialog" aria-modal="true" aria-labelledby="profile-title"><div class="profile-head"><h2 id="profile-title">PERFIL</h2><button class="btn" id="profile-close" type="button">FECHAR</button></div><div class="profile-name-row"><input id="profile-name-input" type="text" maxlength="10" aria-label="Apelido da conta" readonly></div><div class="profile-id">ID DO JOGADOR<code id="profile-id"></code></div><h3 class="profile-history-title">HISTÓRICO DE BATALHAS</h3><div class="profile-history" id="profile-history"></div><button class="btn profile-logout" id="profile-logout" type="button">SAIR DA CONTA</button></section></div>
 <aside id="partner-side" aria-label="Parceiros e esquadrão"><h2>PARCEIROS <span id="partner-count"></span></h2><section><h3>ESQUADRÃO</h3><div id="party-panel"></div></section><section><h3>CONVITES PARA ESQUADRÃO</h3><div id="party-incoming"></div></section><section><h3>CONVITES RECEBIDOS</h3><div id="partner-incoming"></div></section><section><h3>ADICIONADOS</h3><div id="partner-list"></div></section></aside>
 <div id="partner-modal"><section class="partner-card" role="dialog" aria-modal="true" aria-labelledby="partner-title"><div class="partner-head"><h2 id="partner-title">ADICIONAR PARCEIRO</h2><button class="btn" id="partner-close" type="button">FECHAR</button></div><div class="partner-search-row"><input id="partner-search" type="text" maxlength="100" placeholder="Nome ou ID do parceiro" aria-label="Nome ou ID do parceiro"><button class="btn on" id="partner-search-button" type="button">BUSCAR</button></div><div id="partner-search-results" role="status">Digite o nome ou ID de quem deseja adicionar.</div></section></div>`;
 document.head.insertAdjacentHTML('beforeend','<style>#mm-panel{position:absolute;right:24px;bottom:94px;z-index:10;display:none;align-items:center;flex-wrap:wrap;gap:12px;padding:10px 14px;max-width:calc(100vw - 32px);background:#071427eF;border:1px solid #ffb400;color:#fff;font:700 15px Rajdhani,sans-serif}#mm-status{overflow-wrap:anywhere}#mm-cancel{padding:7px 12px;font-size:12px}</style>');
 const mmPanel=document.createElement('div');mmPanel.id='mm-panel';mmPanel.innerHTML='<span id="mm-status"></span><button class="btn" id="mm-cancel">CANCELAR</button>';$('lobby').appendChild(mmPanel);
 $('partner-list').className='partner-list';$('partner-incoming').className='partner-incoming';
-document.head.insertAdjacentHTML('beforeend','<style>#chips{display:none}#partner-open{padding:7px 10px;font-size:13px;font-style:normal}#cfgb{width:42px;height:38px;padding:0;display:grid;place-items:center;font:900 23px Arial,sans-serif}#partner-side{position:absolute;right:14px;top:66px;z-index:8;width:min(270px,27vw);max-height:56vh;overflow:auto;padding:12px;background:rgba(8,16,34,.93);border-top:3px solid #57e7ff;color:#fff;font-style:normal}#partner-side h2{display:flex;justify-content:space-between;margin:0 0 10px;color:#57e7ff;font:900 17px Orbitron,sans-serif}#partner-side h2 span{color:#ffd23a}#partner-side h3{margin:12px 0 6px;color:#ffd23a;font:800 13px Rajdhani,sans-serif}.partner-list,.partner-incoming,.party-members,.party-incoming{display:grid;gap:7px}.partner-entry,.party-member{padding:8px;background:#101f37;border-left:3px solid #50df8a;font:600 13px Rajdhani,sans-serif}.partner-entry.pending,.party-member.pending{border-left-color:#ffb400}.partner-entry strong,.partner-entry small,.partner-entry .partner-status,.party-member strong,.party-member small{display:block;overflow-wrap:anywhere}.partner-entry small,.party-member small{margin-top:3px;color:#9fb2cc;font:600 10px monospace}.partner-status{margin-top:4px;color:#aabbd0;font-size:11px}.partner-actions{display:flex;gap:5px;margin-top:7px}.partner-actions .btn{flex:1;padding:5px 7px;font:700 11px Rajdhani,sans-serif;font-style:normal}.party-actions{display:grid;gap:6px;margin-top:8px}.party-actions .btn,.party-invite-actions .btn{padding:6px 7px;font:700 11px Rajdhani,sans-serif;font-style:normal}.party-invite{padding:8px;background:#101f37;border-left:3px solid #ffb400;font:600 12px Rajdhani,sans-serif}.party-invite-actions{display:flex;gap:5px;margin-top:7px}.party-invite-actions .btn{flex:1}.partner-empty{margin:0;padding:8px;background:#101f37;color:#aabbd0;font:600 12px Rajdhani,sans-serif}#partner-modal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(2,7,18,.84);font-style:normal}.partner-card{width:min(560px,100%);max-height:88vh;overflow:auto;padding:20px;background:#081427;border:1px solid #57e7ff88;border-top:4px solid #57e7ff;box-shadow:0 18px 70px #000b}.partner-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.partner-head h2{margin:0;color:#57e7ff;font:900 22px Orbitron,sans-serif}.partner-search-row{display:flex;gap:8px;margin-top:14px}.partner-search-row input{min-width:0;flex:1;padding:10px;background:#101f37;border:1px solid #2b4968;color:#fff;font:700 16px Rajdhani,sans-serif;user-select:text}.partner-search-results{display:grid;gap:8px;margin-top:12px}.partner-search-result{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px;background:#101f37;border-left:3px solid #57e7ff;color:#fff;font:700 14px Rajdhani,sans-serif}.partner-search-result small{display:block;margin-top:4px;color:#9fb2cc;font:600 10px monospace;overflow-wrap:anywhere}.partner-search-result .partner-online{color:#50df8a}.partner-search-result .partner-offline{color:#aabbd0}.partner-search-result .btn{padding:6px 9px;white-space:nowrap;font-size:11px;font-style:normal}.partner-search-note{margin:0;padding:12px;background:#101f37;color:#aabbd0;text-align:center;font:600 13px Rajdhani,sans-serif}@media(max-width:700px){.fftr{right:7px;top:8px;gap:4px}.chip{padding:6px 8px;font-size:12px}#partner-open{padding:6px 8px;font-size:10px}#cfgb{width:32px;height:32px;font-size:18px}#partner-side{right:8px;top:52px;width:min(210px,45vw);max-height:44vh;padding:8px}#partner-side h2{font-size:14px}.partner-card{padding:14px}}</style>');
+document.head.insertAdjacentHTML('beforeend','<style>#chips{display:none}#partner-open{padding:7px 10px;font-size:13px;font-style:normal}#cfgb{width:42px;height:38px;padding:0;display:grid;place-items:center;font:900 23px Arial,sans-serif}.ffm-right{left:auto;right:0}.ffm-right button{width:92px}#partner-side{position:absolute;right:0;top:190px;z-index:8;width:min(270px,27vw);max-height:56vh;overflow:auto;padding:12px;background:rgba(8,16,34,.93);border-top:3px solid #57e7ff;color:#fff;font-style:normal;display:none}#partner-side.is-open{display:block}#partner-side h2{display:flex;justify-content:space-between;margin:0 0 10px;color:#57e7ff;font:900 17px Orbitron,sans-serif}#partner-side h2 span{color:#ffd23a}#partner-side h3{margin:12px 0 6px;color:#ffd23a;font:800 13px Rajdhani,sans-serif}.partner-list,.partner-incoming,.party-members,.party-incoming{display:grid;gap:7px}.partner-entry,.party-member{padding:8px;background:#101f37;border-left:3px solid #50df8a;font:600 13px Rajdhani,sans-serif}.partner-entry.pending,.party-member.pending{border-left-color:#ffb400}.partner-entry strong,.partner-entry small,.partner-entry .partner-status,.party-member strong,.party-member small{display:block;overflow-wrap:anywhere}.partner-entry small,.party-member small{margin-top:3px;color:#9fb2cc;font:600 10px monospace}.partner-status{margin-top:4px;color:#aabbd0;font-size:11px}.partner-actions{display:flex;gap:5px;margin-top:7px}.partner-actions .btn{flex:1;padding:5px 7px;font:700 11px Rajdhani,sans-serif;font-style:normal}.party-actions{display:grid;gap:6px;margin-top:8px}.party-actions .btn,.party-invite-actions .btn{padding:6px 7px;font:700 11px Rajdhani,sans-serif;font-style:normal}.party-invite{padding:8px;background:#101f37;border-left:3px solid #ffb400;font:600 12px Rajdhani,sans-serif}.party-invite-actions{display:flex;gap:5px;margin-top:7px}.party-invite-actions .btn{flex:1}.partner-empty{margin:0;padding:8px;background:#101f37;color:#aabbd0;font:600 12px Rajdhani,sans-serif}#partner-modal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(2,7,18,.84);font-style:normal}.partner-card{width:min(560px,100%);max-height:88vh;overflow:auto;padding:20px;background:#081427;border:1px solid #57e7ff88;border-top:4px solid #57e7ff;box-shadow:0 18px 70px #000b}.partner-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.partner-head h2{margin:0;color:#57e7ff;font:900 22px Orbitron,sans-serif}.partner-search-row{display:flex;gap:8px;margin-top:14px}.partner-search-row input{min-width:0;flex:1;padding:10px;background:#101f37;border:1px solid #2b4968;color:#fff;font:700 16px Rajdhani,sans-serif;user-select:text}.partner-search-results{display:grid;gap:8px;margin-top:12px}.partner-search-result{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px;background:#101f37;border-left:3px solid #57e7ff;color:#fff;font:700 14px Rajdhani,sans-serif}.partner-search-result small{display:block;margin-top:4px;color:#9fb2cc;font:600 10px monospace;overflow-wrap:anywhere}.partner-search-result .partner-online{color:#50df8a}.partner-search-result .partner-offline{color:#aabbd0}.partner-search-result .btn{padding:6px 9px;white-space:nowrap;font-size:11px;font-style:normal}.partner-search-note{margin:0;padding:12px;background:#101f37;color:#aabbd0;text-align:center;font:600 13px Rajdhani,sans-serif}@media(max-width:700px){.fftr{right:7px;top:8px;gap:4px}.chip{padding:6px 8px;font-size:12px}#partner-open{padding:6px 8px;font-size:10px}#cfgb{width:32px;height:32px;font-size:18px}.ffm-right{right:0}.ffm-right button{width:70px}#partner-side{right:0;top:156px;width:min(210px,42vw);max-height:36vh;padding:8px}.partner-entry,.party-member{padding:5px;font-size:11px}.partner-actions{margin-top:5px}.partner-actions .btn{padding:4px;font-size:10px}#partner-side h2{font-size:14px}.partner-card{padding:14px}}</style>');
 // ---- celular: reconhecimento automático, orientação e tela cheia
 const MOB=(('ontouchstart' in window)||navigator.maxTouchPoints>0)&&(!window.matchMedia||matchMedia('(pointer:coarse)').matches);
 document.head.insertAdjacentHTML('beforeend','<style>html,body{overscroll-behavior:none;touch-action:none}#rot{position:fixed;inset:0;z-index:200;background:#050816;color:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;font:700 22px Rajdhani,Arial,sans-serif;gap:14px}#rot b{font-size:64px;animation:rt 1.6s ease-in-out infinite}@keyframes rt{0%,100%{transform:rotate(0)}50%{transform:rotate(-90deg)}}#fsb{position:fixed;left:50%;top:8px;transform:translateX(-50%);z-index:60;font:700 14px Rajdhani,Arial,sans-serif;padding:6px 14px;background:rgba(10,20,40,.85);border:2px solid #ffffff55;color:#fff;cursor:pointer}#fsb:hover{border-color:#ffb400}#toast2{position:fixed;left:50%;bottom:20%;transform:translateX(-50%);z-index:300;background:#000d;padding:10px 18px;border:1px solid #ffb400;font:600 15px Rajdhani,Arial,sans-serif;max-width:80vw;text-align:center;display:none}@media(max-height:520px){.ffm button{width:64px;padding:6px 2px;font-size:10px}.ffm button b{font-size:18px}.ffm{top:96px}.ffp{transform:scale(.8);transform-origin:left top}.rbar{top:70px!important}#info{bottom:92px;padding:4px 40px}#info .nm{font-size:22px}#modes{bottom:50px}#modes .btn{padding:6px 18px;font-size:14px}#go{padding:10px 36px;font-size:20px}#golbl{bottom:58px}#hint,#slots{display:none}.arw{width:36px;height:56px}.ffpn{top:96px;left:100px;max-height:50vh}}</style>');
-document.head.insertAdjacentHTML('beforeend','<style>@media(max-height:520px){#rank-summary{bottom:94px;transform:scale(.8);transform-origin:right bottom}}.profile-name-row input{user-select:text}</style>');
+document.head.insertAdjacentHTML('beforeend','<style>@media(max-height:520px){#rank-summary{bottom:94px;transform:scale(.8);transform-origin:right bottom}}.profile-name-row input{user-select:text}.profile-logout{width:100%;margin-top:16px;border-color:#ff5964;color:#ff8a91;font-style:normal}</style>');
 document.body.insertAdjacentHTML('beforeend','<div id="rot"><b>📱</b><div>Gire o celular na horizontal<br><small style="font-weight:500;opacity:.7">O jogo funciona em modo paisagem</small></div></div><button id="fsb" title="Tela cheia">⛶ TELA CHEIA</button><div id="toast2"></div>');
 const FSEL=()=>document.fullscreenElement||document.webkitFullscreenElement;
 function toast2(t){const e=$('toast2');e.textContent=t;e.style.display='block';clearTimeout(toast2.t);toast2.t=setTimeout(()=>{e.style.display='none'},3800)}
@@ -515,20 +542,25 @@ function searchPartners(){
 $('profile-button').onclick=()=>{$('profile-modal').style.display='flex';renderProfile();$('profile-name-input').focus()};
 $('profile-close').onclick=()=>$('profile-modal').style.display='none';
 $('profile-modal').onclick=event=>{if(event.target===$('profile-modal'))$('profile-modal').style.display='none'};
-$('profile-save').onclick=()=>{
- const name=normalizeProfileName($('profile-name-input').value);
- if(!name){toast2('Digite um nome para o perfil.');return}
-  profile.name=name;persistProfile();renderProfile();friendRegisteredKey='';registerCurrentProfile()
-};
+$('profile-logout').onclick=()=>{if(confirm('Sair desta conta? Para entrar de novo você precisará do apelido e da senha.'))logoutAccount()};
+if(location.protocol==='file:')$('profile-logout').style.display='none';
+  $('partner-toggle').onclick=()=>{
+   const open=$('partner-side').classList.toggle('is-open');
+   $('partner-toggle').setAttribute('aria-expanded',String(open));
+  };
   $('partner-open').onclick=()=>{$('partner-modal').style.display='flex';$('partner-search-results').textContent='Digite o nome ou ID de quem deseja adicionar.';$('partner-search').focus()};
 $('partner-close').onclick=()=>$('partner-modal').style.display='none';
 $('partner-modal').onclick=event=>{if(event.target===$('partner-modal'))$('partner-modal').style.display='none'};
 $('partner-search-button').onclick=searchPartners;
 $('partner-search').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();searchPartners()}};
-addEventListener('keydown',event=>{if(event.code==='Escape'&&$('partner-modal').style.display==='flex'){$('partner-modal').style.display='none';event.preventDefault();event.stopImmediatePropagation()}},true);
+addEventListener('keydown',event=>{
+ if(event.code!=='Escape')return;
+ if($('partner-modal').style.display==='flex'){$('partner-modal').style.display='none';event.preventDefault();event.stopImmediatePropagation();return}
+ if($('partner-side').classList.contains('is-open')){$('partner-side').classList.remove('is-open');$('partner-toggle').setAttribute('aria-expanded','false');event.preventDefault()}
+},true);
 renderProfile();
 renderFriendPanel();
-document.querySelectorAll('.ffm button').forEach(b=>b.onclick=()=>{const n=b.dataset.p;PN.forEach(k=>{$('p'+k).style.display=(k==n&&$('p'+k).style.display!='block')?'block':'none'});document.querySelectorAll('.ffm button').forEach(x=>x.classList.toggle('on',$('p'+x.dataset.p).style.display=='block'))});
+document.querySelectorAll('.ffm:not(.ffm-right) button').forEach(b=>b.onclick=()=>{const n=b.dataset.p;PN.forEach(k=>{$('p'+k).style.display=(k==n&&$('p'+k).style.display!='block')?'block':'none'});document.querySelectorAll('.ffm:not(.ffm-right) button').forEach(x=>x.classList.toggle('on',$('p'+x.dataset.p).style.display=='block'))});
 $('pl').onclick=()=>{sel=(sel+CH.length-1)%CH.length;ui();prev()};$('pr').onclick=()=>{sel=(sel+1)%CH.length;ui();prev()};
 function ffUpd(){
  const st=Math.min(4,Math.floor(save.pts/STAR_POINTS));
@@ -558,11 +590,12 @@ function enqueueMatch(){
  if(netSocket.connected)sendMatchRequest();else netSocket.connect();
 }
 function registerCurrentProfile(){
- if(!netSocket||!netSocket.connected)return;
+ if(!netSocket||!netSocket.connected||!auth)return;
  const key=netSocket.id+':'+profile.id+':'+profile.name;
  if(friendRegisteredKey===key)return;
  friendRegisteredKey=key;
- netSocket.emit('friends:register',{profileId:profile.id,name:profile.name},result=>{
+ netSocket.emit('friends:register',{profileId:profile.id,name:profile.name,token:auth.token},result=>{
+  if(result&&result.code==='auth'){logoutAccount('Sua sessão expirou. Entre novamente com seu apelido e senha.');return}
   if(!result||!result.ok){friendRegisteredKey='';toast2(result&&result.error||'Não foi possível registrar seu perfil no servidor.');return}
   if(PROFILE_ID_RE.test(result.profileId)&&result.profileId!==profile.id){profile.id=result.profileId;persistProfile();renderProfile()}
   if(result.name&&result.name!==profile.name){profile.name=result.name;persistProfile();renderProfile()}
@@ -578,7 +611,12 @@ socketReady.then(socket=>{
  socket.on('friends:state',data=>{friendState={friends:Array.isArray(data&&data.friends)?data.friends:[],incoming:Array.isArray(data&&data.incoming)?data.incoming:[],outgoing:Array.isArray(data&&data.outgoing)?data.outgoing:[]};renderFriendPanel()});
  socket.on('party:state',data=>{
   partyState={party:data&&data.party||null,invitations:Array.isArray(data&&data.invitations)?data.invitations:[]};
-  if(partyState.party){mode='squad';if(scn!==partyState.party.scene)setScene(partyState.party.scene)}
+  if(partyState.party){
+   mode='squad';
+   if(scn!==partyState.party.scene)setScene(partyState.party.scene);
+   $('partner-side').classList.add('is-open');
+   $('partner-toggle').setAttribute('aria-expanded','true');
+  }
   if($('lobby').style.display!=='none')ui();
   renderFriendPanel()
  });
@@ -600,6 +638,55 @@ socketReady.then(socket=>{
  if(socket.connected)registerCurrentProfile();
 });
  setInterval(()=>{if(!netQueued)return;if(netQueueMode==='x1'){if(mmLastSecond!==-2){mmLastSecond=-2;updateMatchmaking('Aguardando outro jogador real · '+netCount+'/2 · modo sem bots')}return}const seconds=Math.ceil(Math.max(0,netDeadline-Date.now())/1000);if(seconds!==mmLastSecond){mmLastSecond=seconds;updateMatchmaking('Buscando partida · '+seconds+'s · '+netCount+'/'+netMax+' jogadores · bots completam 50')}},250);
+// ---- conta: apelido (até 10 caracteres) e senha, criados uma única vez
+document.head.insertAdjacentHTML('beforeend','<style>#auth-gate{position:fixed;inset:0;z-index:400;display:none;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at 50% 0,#1d3358,#050816 75%);font-family:Rajdhani,sans-serif;font-style:normal}#auth-gate.on{display:flex}.auth-card{width:min(420px,100%);max-height:100%;overflow:auto;padding:24px;background:#081427;border:1px solid #57e7ff88;border-top:4px solid #57e7ff;box-shadow:0 18px 70px #000b;color:#fff}.auth-card h2{margin:0 0 6px;color:#57e7ff;font:900 22px Orbitron,sans-serif}.auth-card p{margin:0 0 14px;color:#9fb2cc;font:600 15px Rajdhani,sans-serif}.auth-card label{display:block;margin:12px 0 4px;color:#8ea6c3;font:700 10px Orbitron,sans-serif;letter-spacing:1px}.auth-card input{width:100%;padding:11px;background:#101f37;border:1px solid #2b4968;color:#fff;font:700 17px Rajdhani,sans-serif;user-select:text}.auth-error{min-height:20px;margin:10px 0;color:#ff8a91;font:700 14px Rajdhani,sans-serif}#auth-submit{width:100%;font-style:normal}.auth-switch{display:block;width:100%;margin-top:14px;padding:8px;background:none;border:0;color:#57e7ff;font:700 15px Rajdhani,sans-serif;text-decoration:underline;cursor:pointer}</style>');
+document.body.insertAdjacentHTML('beforeend','<div id="auth-gate"><form class="auth-card" id="auth-form"><h2>DRAGON BALL ROYALE</h2><p id="auth-intro"></p><label for="auth-name">APELIDO (ATÉ 10 CARACTERES)</label><input id="auth-name" type="text" maxlength="10" autocomplete="username" autocapitalize="off" spellcheck="false"><label for="auth-password">SENHA</label><input id="auth-password" type="password" autocomplete="new-password"><div class="auth-error" id="auth-error" role="alert"></div><button class="btn on" id="auth-submit" type="submit"></button><button class="auth-switch" id="auth-switch" type="button"></button></form></div>');
+let authMode='register',authBusy=false;
+function setAuthMode(next){
+ authMode=next;
+ $('auth-password').autocomplete=next==='register'?'new-password':'current-password';
+ $('auth-submit').textContent=next==='register'?'CRIAR CONTA E JOGAR':'ENTRAR';
+ $('auth-switch').textContent=next==='register'?'Já tenho uma conta':'Criar uma conta nova';
+ $('auth-intro').textContent=next==='register'?'Crie seu apelido e sua senha. Você só faz isso uma vez.':'Digite o apelido e a senha da sua conta.';
+ $('auth-error').textContent=''
+}
+function showAuthGate(message){
+ setAuthMode(authMode);
+ $('auth-gate').classList.add('on');
+ $('auth-error').textContent=message||'';
+ try{document.exitPointerLock()}catch(error){}
+ $('auth-name').focus()
+}
+$('auth-switch').onclick=()=>{setAuthMode(authMode==='register'?'login':'register');$('auth-name').focus()};
+$('auth-form').onsubmit=async event=>{
+ event.preventDefault();
+ if(authBusy)return;
+ const name=$('auth-name').value.trim(),password=$('auth-password').value;
+ if(!name){$('auth-error').textContent='Digite um apelido.';return}
+ if(!password){$('auth-error').textContent='Digite uma senha.';return}
+ authBusy=true;$('auth-submit').disabled=true;$('auth-error').textContent='';
+ try{
+  const response=await fetch('/api/account/'+authMode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,password})});
+  const result=await response.json().catch(()=>null);
+  if(!result||!result.ok){
+   $('auth-error').textContent=result&&result.error||'Não foi possível conectar ao servidor.';
+   if(authMode==='register'){$('auth-name').focus();$('auth-name').select()}
+   return
+  }
+  setAuth(result);
+  $('auth-password').value='';
+  $('auth-gate').classList.remove('on');
+  renderProfile();friendRegisteredKey='';registerCurrentProfile()
+ }catch(error){
+  console.error('Falha ao acessar a conta.',error);
+  $('auth-error').textContent='Não foi possível conectar ao servidor.'
+ }finally{authBusy=false;$('auth-submit').disabled=false}
+};
+if(location.protocol!=='file:'&&!auth){
+ let notice='';
+ try{notice=sessionStorage.getItem(AUTH_NOTICE_KEY)||'';sessionStorage.removeItem(AUTH_NOTICE_KEY)}catch(error){}
+ showAuthGate(notice)
+}
 // ---- configurações
 const KBD={fwd:'KeyW',back:'KeyS',left:'KeyA',right:'KeyD',up:'Space',down:'KeyC',melee:'KeyF',spec:'KeyQ',charge:'KeyE',tr:'KeyT',dash:'KeyX',lock:'ShiftLeft',cam:'KeyV',guard:'KeyR',spec2:'KeyZ',settings:'KeyP',fire:''};
 const GPD={fire:7,melee:2,spec:3,charge:6,tr:4,dash:5,up:0,down:1,lock:10,cam:11,guard:8,spec2:12,settings:9};
@@ -1621,7 +1708,7 @@ function requestRespawn(){if(!deathRespawnPending||respawnRequestPending)return;
 $('respawn').onclick=requestRespawn;
 function returnToLobby(){if(netSocket&&netMatch)netSocket.emit('room:leave');netMatch=null;netPlayerId=null;netQueued=false;state='lobby';clear();for(let i=doms.length-1;i>=0;i--)if(doms[i].mine){removeDomain(doms[i]);doms.splice(i,1)}P=items=pr=null;$('cfg').style.display='none';$('hud').style.display='none';$('end').style.display='none';$('lobby').style.display='flex';try{document.exitPointerLock()}catch(e){};ui();prev();syncLobbyMusic()}
 $('back').onclick=returnToLobby;
-addEventListener('keydown',e=>{if(e.code==='Escape'&&$('profile-modal').style.display==='flex'){$('profile-modal').style.display='none';e.preventDefault();return}if(waitK){KB[waitK]=e.code;waitK=null;saveCfg();renderCfg();e.preventDefault();return}if(state==='play'&&KB.settings&&e.code===KB.settings&&!e.repeat){if($('cfg').style.display==='flex')closeSettings();else openMatchSettings();e.preventDefault();return}if($('cfg').style.display==='flex'){e.preventDefault();return}if(e.code=='Backspace'&&TRAIN&&state=='play')$('back').onclick();K[e.code]=1;if(e.code=='Space')e.preventDefault();
+addEventListener('keydown',e=>{if(e.code==='Escape'&&$('profile-modal').style.display==='flex'){$('profile-modal').style.display='none';e.preventDefault();return}if(e.target&&e.target.closest&&e.target.closest('input,textarea'))return;if(waitK){KB[waitK]=e.code;waitK=null;saveCfg();renderCfg();e.preventDefault();return}if(state==='play'&&KB.settings&&e.code===KB.settings&&!e.repeat){if($('cfg').style.display==='flex')closeSettings();else openMatchSettings();e.preventDefault();return}if($('cfg').style.display==='flex'){e.preventDefault();return}if(e.code=='Backspace'&&TRAIN&&state=='play')$('back').onclick();K[e.code]=1;if(e.code=='Space')e.preventDefault();
  if(e.code==KB.lock&&!e.repeat&&state=='play'){slk=!slk;if(slk)try{$('gl').requestPointerLock()}catch(x){}}
  if(e.code==KB.cam&&!e.repeat&&state=='play')fp=!fp});addEventListener('keyup',e=>K[e.code]=0);
 $('gl').addEventListener('click',()=>{try{$('gl').requestPointerLock()}catch(e){}});
