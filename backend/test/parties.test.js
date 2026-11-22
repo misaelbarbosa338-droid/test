@@ -175,5 +175,8 @@ test("shares a four-player squad lobby and blocks starting until everyone is rea
     assert.deepEqual(room.members.map(member => member.character), [1, 2, 3, 4]);
     matchmaker.startRoom(room);
     assert.deepEqual(room.members.map(member => Math.floor(member.slot / 4)), [0, 0, 0, 0]);
-    assert.equal(partyStates.get(leader.id).party, null);
+    const stayingParty = partyStates.get(leader.id).party;
+    assert.equal(stayingParty.members.length, 4);
+    assert.equal(stayingParty.members.some(member => member.ready), false);
+    assert.equal(partyStates.get(members[2].id).party.id, stayingParty.id);
 });

@@ -298,13 +298,11 @@ function createPartyService({ friends, matchmaker }) {
             return;
         }
 
+        // o esquadrão continua formado durante a busca e depois da partida
         party.status = "queued";
         clearPartyInvitations(party);
-        for (const member of party.members) {
-            partyByProfile.delete(member.profileId);
-            sendState(member.profileId);
-        }
-        parties.delete(party.id);
+        for (const member of party.members) member.ready = false;
+        refreshParty(party);
         acknowledge?.({ ok: true, roomId: result.roomId });
     }
 
